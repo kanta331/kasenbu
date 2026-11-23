@@ -9,7 +9,7 @@ MAT, CON = ROOT/'materials', ROOT/'content'
 SEIHON_RANGE = range(1, 101)
 KAKOMON_YEARS = [2022, 2023, 2024, 2025, 2026]
 
-TOKEN_RE = re.compile(r"(?:[A-Za-z]\.){2,}|'tween|'(?:s|m|re|ve|ll|d)\b|[A-Za-z0-9$]+(?:[-'’.,][A-Za-z0-9]+)*|[^\sA-Za-z0-9]")
+TOKEN_RE = re.compile(r"(?:[A-Za-z]\.){2,}|'tween|'(?:s|m|re|ve|ll|d)\b|[A-Za-zÀ-ÿ0-9$]+(?:[-'’.,][A-Za-zÀ-ÿ0-9]+)*|[^\sA-Za-zÀ-ÿ0-9]")
 CLITIC_S = re.compile(r"(?i)^(that|it|he|she|there|what|who|here|let)('s)$")
 CLITIC = re.compile(r"^([A-Za-z]+)('(?:m|re|ve|ll|d))$")
 def tokenize_ws(s):
@@ -27,6 +27,7 @@ SPLIT_RE = re.compile(r'(?<=[.?!])(["”’)]?)\s+(?=["“(]?[A-Z])')
 def split_sentences(par):
     out, start = [], 0
     for m in SPLIT_RE.finditer(par):
+        if re.search(r'\b(?:St|Mr|Mrs|Ms|Dr)\.$', par[:m.start()]): continue   # 略語のピリオドでは切らない
         end = m.start() + len(m.group(1))
         out.append(par[start:end].strip()); start = m.end()
     out.append(par[start:].strip())
@@ -101,14 +102,14 @@ def cmd_split():
 # ---- 組み立て：content/src/ann_*.json（語句で書いた注釈）→ トークン範囲 ----
 def find_seq(tokens, phrase, after=0):
     """phrase を tokens 内で探す。'語句@2' は2回目。'A … B' は A の頭から B の終わりまで。"""
+    if '…' in phrase:   # 始まりと終わりにそれぞれ @n を付けてよい
+        a, b = [x.strip() for x in phrase.split('…', 1)]
+        ra = find_seq(tokens, a, after)
+        rb = find_seq(tokens, b, ra[0])
+        return [ra[0], rb[1]]
     nth = 1
     if '@' in phrase:
         phrase, n = phrase.rsplit('@', 1); nth = int(n)
-    if '…' in phrase:
-        a, b = [x.strip() for x in phrase.split('…', 1)]
-        ra = find_seq(tokens, a + (f'@{nth}' if nth > 1 else ''), after)
-        rb = find_seq(tokens, b, ra[0])
-        return [ra[0], rb[1]]
     pt = tokenize(phrase); hits = 0
     for i in range(after, len(tokens) - len(pt) + 1):
         if tokens[i:i+len(pt)] == pt:
@@ -143,6 +144,7 @@ def resolve(sent, a, errors):
     out['skeleton_ja'] = a['skel']; out['model_ja'] = a['model']
     out['choices'] = [{'ja': ja, 'error': e} for ja, e in a['ch']]
     if a.get('note'): out['note'] = a['note']
+    if a.get('skip'): out['skip'] = a['skip']        # 答えが1つに決まらない形式は出さない
     out['status'] = a.get('status', 'ok')          # hold の文は出題しない
     if a.get('hold_reason'): out['hold_reason'] = a['hold_reason']
     return out

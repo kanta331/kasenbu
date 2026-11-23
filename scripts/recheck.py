@@ -4,17 +4,21 @@ content/kasenbu-content.json を突き合わせ、食い違いを content/work/r
 import json, pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 mine = json.loads((ROOT/'content/kasenbu-content.json').read_text())
-other = json.loads((ROOT/'content/work/recheck_raw.json').read_text())
+other = {}
+for f in sorted((ROOT/'content/work').glob('recheck_raw*.json')):   # 再解析は何回かに分けて行う
+    other.update(json.loads(f.read_text()))
 CLAUSE = {'REL', 'NOUNCL', 'ADVCL', 'PTC', 'INF'}
-ov = lambda a, b: a[0] <= b[1] and b[0] <= a[1]
+ov = lambda a, b: bool(a) and bool(b) and a[0] <= b[1] and b[0] <= a[1]
 out = {}
 for s in mine['sentences']:
+    if s['id'] not in other: continue
     t, o, d = s['tokens'], other[s['id']], []
     w = lambda r: ' '.join(t[r[0]:r[1]+1]) if r else '∅'
     m = s['main']
     if m['s'] != o.get('s'): d.append(['subject', w(m['s']), w(o.get('s'))])
-    if not ov(m['v'], o['v']): d.append(['verb', w(m['v']), w(o['v'])])
-    mm = [x['v'] for x in m.get('more', [])]; om = [x['v'] for x in o.get('more', [])]
+    if o.get('fragment'): d.append(['fragment_other', w(m['s']) + ' / ' + w(m['v']), '断片（主節なし）'])
+    elif not ov(m['v'], o['v']): d.append(['verb', w(m['v']), w(o['v'])])
+    mm = [x['v'] for x in m.get('more', [])]; om = [x['v'] for x in o.get('more', []) if x.get('v')]
     for v in mm:
         if not any(ov(v, x) for x in om): d.append(['more_verb_only_mine', w(v), ''])
     for v in om:
@@ -35,4 +39,5 @@ for s in mine['sentences']:
 kinds = {}
 for v in out.values():
     for k in v: kinds[k[0]] = kinds.get(k[0], 0) + 1
-print(f"食い違いのある文 {len(out)} / {len(mine['sentences'])}", kinds)
+n = sum(1 for s in mine['sentences'] if s['id'] in other)
+print(f"再解析と突き合わせた文 {n} / 食い違いのある文 {len(out)}", kinds)

@@ -62,7 +62,7 @@ export function applicableFormats(s) {
   if (referentFor(s)) f.push('D');
   if ((s.connectors ?? []).length) f.push('E');
   if ((s.choices ?? []).length === 2) f.push('F');
-  return f;
+  return f.filter(x => !(s.skip ?? []).includes(x));   // 答えが1つに決まらない形式は注釈で外してある
 }
 
 // ---- どの文を出してよいか ----
@@ -266,7 +266,7 @@ export function weeklyText(content, state, now = Date.now()) {
   const err = Object.entries(state.errorStats).sort((a, b) => b[1] - a[1]).slice(0, 3);
   lines.push('多い誤読：' + (err.length ? err.map(([e, n]) => `${e} ${n}回`).join('、') : 'なし'));
   const bs = bossOrder(content.bosses).map(b => `${b.id}:${{ defeated: '撃破', tried: '挑戦済み' }[state.bosses[b.id]?.status] ?? '未挑戦'}`);
-  lines.push(`ボス：撃破 ${defeatedCount(state)}/${content.bosses.length}`, bs.join(' '));
+  lines.push(`ボス：撃破 ${defeatedCount(state)}/20（合格ライン（推定）${PASS_LINE}）`, bs.join(' '));
   if (state.flags.length) lines.push('「おかしい」と報告した文：' + [...new Set(state.flags)].join(', '));
   return lines.join('\n');
 }

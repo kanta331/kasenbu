@@ -167,3 +167,9 @@ test('試験まであと何日', () => {
   assert.equal(L.daysUntilExam('2027-01-22'), 1);
   assert.equal(L.daysUntilExam('2026-11-24'), 60);
 });
+
+test('答えが1つに決まらない形式（skip）は出さない', () => {
+  const s = { ...full('S026-2'), skip: ['A'] };
+  assert.ok(!L.applicableFormats(s).includes('A'));
+  assert.ok(L.applicableFormats(s).includes('B'));
+});
