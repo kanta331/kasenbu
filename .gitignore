@@ -1,0 +1,9 @@
+# 教材（著作物）と生成物。英文・訳・過去問をコミットしない
+materials/
+content/
+# 手元だけに置く（受験の個人的な事情・過去問の語句を含む）
+CLAUDE.md
+docs/
+PROMPTS.md
+.claude/
+.DS_Store
