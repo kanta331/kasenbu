@@ -234,3 +234,15 @@ test('基礎講座の型を重く出す（focus）', () => {
   const without = count([]), withF = count(['NOUNCL']);
   assert.ok(withF > without * 1.5, `focus なし ${without} / あり ${withF}`);
 });
+
+test('基礎講座の状態：終えた・とばした・まだ。とばした回を見直し終えると終えた扱い', () => {
+  let st = L.recordLesson(L.emptyState(), 0, TODAY, 'S001-1');
+  st = L.recordLesson(st, 1, TODAY, null, { skipped: true });
+  assert.equal(L.lessonStatus(st, 0), 'done');
+  assert.equal(L.lessonStatus(st, 1), 'skipped');
+  assert.equal(L.lessonStatus(st, 2), null);
+  assert.equal(st.lessons.exampleOf[0], 'S001-1');
+  st = L.recordLesson(st, 1, TODAY, 'S002-1');          // 見直しで最後まで進んだ
+  assert.equal(L.lessonStatus(st, 1), 'done');
+  assert.equal(L.lessonDue(st, TODAY, 15), 2);           // 次の回は変わらない
+});

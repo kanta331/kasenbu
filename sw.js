@@ -1,6 +1,6 @@
 /* オフライン用。コードだけをキャッシュする（コンテンツは IndexedDB にあり、ここでは扱わない）。
    保存済みがあればすぐ返し、裏でネットから取り直す。コードを更新して公開するときは VERSION を上げる。 */
-var VERSION = 'v4';
+var VERSION = 'v5';
 var CACHE = 'kasenbu-' + VERSION;
 var SHELL = ['./', 'index.html', 'js/app.js', 'js/logic.js', 'js/db.js', 'js/lessons.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];

@@ -326,7 +326,15 @@ export function recordLesson(state, idx, today, exampleId = null, { skipped = fa
   L.examples ??= [];
   if (idx >= L.next) L.next = idx + 1;
   L.day = dayNumber(today);
-  if (exampleId) L.examples.push(exampleId);
-  if (skipped) (L.skipped ??= []).push(idx);
+  if (exampleId) { L.examples.push(exampleId); (L.exampleOf ??= {})[idx] = exampleId; }
+  L.skipped ??= [];
+  if (skipped) { if (!L.skipped.includes(idx)) L.skipped.push(idx); }
+  else L.skipped = L.skipped.filter(x => x !== idx);   // とばした回を見直して最後まで進めば、終えた扱い
   return st;
+}
+/** 講座の状態：'done'（終えた）／'skipped'（とばした）／null（まだ） */
+export function lessonStatus(state, idx) {
+  const L = state.lessons ?? { next: 0 };
+  if (idx >= (L.next ?? 0)) return null;
+  return (L.skipped ?? []).includes(idx) ? 'skipped' : 'done';
 }

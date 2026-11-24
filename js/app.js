@@ -139,7 +139,7 @@ function showHome() {
     }
     grid += '</div>';
   }
-  view(`<div class="top"><h1>下線部</h1><button class="link" id="export">書き出し</button></div>
+  view(`<div class="top"><h1>下線部</h1><span><button class="link" id="lessons">講座</button><button class="link" id="export">書き出し</button></span></div>
     <div class="stats">
       <div class="stat"><b>${Math.max(0, L.daysUntilExam(t))}</b><span>試験まであと（日）</span></div>
       <div class="stat"><b>${L.defeatedCount(state)}<small style="font-size:16px">/20</small></b><span>骨格を取り切れた下線部（合格ライン（推定）${L.PASS_LINE}）</span></div>
@@ -148,6 +148,7 @@ function showHome() {
     `${lessonNote()}<button class="btn" id="go">今日の5問</button>`);
   document.getElementById('go').onclick = startSession;
   document.getElementById('export').onclick = showExport;
+  document.getElementById('lessons').onclick = showLessonList;
   $app.querySelectorAll('[data-boss]').forEach(el => el.onclick = () => showBossIntro(bosses.get(el.dataset.boss)));
 }
 
@@ -156,9 +157,24 @@ function lessonNote() {
   const li = L.lessonDue(state, today(), LESSONS.length);
   return li == null ? '' : `<p class="lnote">基礎講座 第${li + 1}回（2〜3分）から始まる</p>`;
 }
-function showLesson(li, k, shown = false) {
+/** 講座の一覧。終えた回・とばした回を開いて見直せる（見直しは5問につながない）。 */
+const LSTATUS = { done: '終えた', skipped: 'とばした' };
+function showLessonList() {
+  const rows = LESSONS.map((les, i) => {
+    const st = L.lessonStatus(state, i);
+    return st
+      ? `<button class="lrow" data-li="${i}"><span class="lno">${i + 1}</span><span class="lname">${esc(les.title)}</span><span class="lst ${st}">${LSTATUS[st]}</span></button>`
+      : `<div class="lrow off"><span class="lno">${i + 1}</span><span class="lname">${esc(les.title)}</span><span class="lst">まだ</span></div>`;
+  }).join('');
+  view(`<div class="top"><h1>基礎講座</h1><button class="link" id="back">ホーム</button></div>
+    <p class="muted">終えた回・とばした回を見直せる。まだの回は「今日の5問」で順に出る。</p>
+    <div class="llist">${rows}</div>`);
+  document.getElementById('back').onclick = showHome;
+  $app.querySelectorAll('[data-li]').forEach(el => el.onclick = () => showLesson(+el.dataset.li, 0, false, true));
+}
+function showLesson(li, k, shown = false, review = false) {
   const les = LESSONS[li], n = les.cards.length;
-  const head = `<div class="qhead"><span>基礎講座 ${li + 1} / ${LESSONS.length}</span><button class="link" id="quit" style="padding:0">やめる</button></div>
+  const head = `<div class="qhead"><span>基礎講座 ${li + 1} / ${LESSONS.length}${review ? '　見直し' : ''}</span><button class="link" id="quit" style="padding:0">${review ? '一覧へ' : 'やめる'}</button></div>
     <h1 class="ltitle">${esc(les.title)}</h1>${k === 0 ? `<p class="lgoal">${esc(les.goal)}</p>` : ''}`;
   let body, nextLabel, exId = null;
   if (k < n) {
@@ -167,24 +183,29 @@ function showLesson(li, k, shown = false) {
       ${shown ? `<p class="lja">${esc(c.ja)}</p>${legendFor(c.ex)}` : ''}`;
     nextLabel = shown ? '次へ' : '形を見る';
   } else {
-    const ex = L.pickExample(content, state, les.real);
-    if (!ex) return finishLesson(li, null);
+    const known = state.lessons?.exampleOf?.[li];
+    const ex = (review && known && byId(known)) || L.pickExample(content, state, les.real);
+    if (!ex) return review ? endReview(li, null) : finishLesson(li, null);
     exId = ex.id;
     body = `<p class="lsay">本物の文（正本${ex.source.no}番）。${esc(les.realSay)}</p>
       ${shown ? sentenceHTML(ex, { mark: 'all' }) + legend + `<dl class="kv"><dt>骨格訳</dt><dd>${esc(ex.skeleton_ja)}</dd><dt>模範訳</dt><dd>${esc(ex.model_ja)}</dd></dl>` : sentenceHTML(ex, {})}`;
-    nextLabel = shown ? (les.focus.length ? 'この形を含む5問へ' : '今日の5問へ') : '形を見る';
+    nextLabel = shown ? (review ? '一覧へ戻る' : les.focus.length ? 'この形を含む5問へ' : '今日の5問へ') : '形を見る';
   }
-  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button><button class="btn sub" id="lskip">この回はとばして5問へ</button>`);
-  document.getElementById('quit').onclick = showHome;
-  document.getElementById('lskip').onclick = () => {
+  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button>${review ? '' : '<button class="btn sub" id="lskip">この回はとばして5問へ</button>'}`);
+  document.getElementById('quit').onclick = review ? showLessonList : showHome;
+  document.getElementById('lskip')?.addEventListener('click', () => {
     state = L.recordLesson(state, li, today(), null, { skipped: true }); save();
     runSession();
-  };
+  });
   document.getElementById('lnext').onclick = () => {
-    if (!shown) return showLesson(li, k, true);
-    if (k < n) return showLesson(li, k + 1, false);
-    finishLesson(li, exId);
+    if (!shown) return showLesson(li, k, true, review);
+    if (k < n) return showLesson(li, k + 1, false, review);
+    review ? endReview(li, exId) : finishLesson(li, exId);
   };
+}
+function endReview(li, exId) {
+  if (L.lessonStatus(state, li) === 'skipped') { state = L.recordLesson(state, li, today(), exId); save(); }
+  showLessonList();
 }
 function finishLesson(li, exId) {
   state = L.recordLesson(state, li, today(), exId); save();
