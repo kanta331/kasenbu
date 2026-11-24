@@ -177,13 +177,14 @@ test('答えが1つに決まらない形式（skip）は出さない', () => {
 // ---- 基礎講座 ----
 import { LESSONS, exampleHTML } from '../js/lessons.js';
 
-test('基礎講座：1日1回だけ、順番に、全部終われば出ない', () => {
+test('基礎講座：押すたびに順番に出て、全部終われば出ない', () => {
   let st = L.emptyState();
   assert.equal(L.lessonDue(st, TODAY, 3), 0);
   st = L.recordLesson(st, 0, TODAY, 'S001-1');
-  assert.equal(L.lessonDue(st, TODAY, 3), null);          // 同じ日は2回目なし
-  assert.equal(L.lessonDue(st, '2026-12-02', 3), 1);
-  st = L.recordLesson(st, 1, '2026-12-02');
+  assert.equal(L.lessonDue(st, TODAY, 3), 1);             // 同じ日でも次の回が出る
+  st = L.recordLesson(st, 1, TODAY, null, { skipped: true });   // とばした回は終わった扱い
+  assert.deepEqual(st.lessons.skipped, [1]);
+  assert.equal(L.lessonDue(st, TODAY, 3), 2);
   st = L.recordLesson(st, 2, '2026-12-03');
   assert.equal(L.lessonDue(st, '2026-12-04', 3), null);   // 全部終わった
   assert.deepEqual(st.lessons.examples, ['S001-1']);

@@ -101,6 +101,7 @@ button{ font:inherit; color:inherit; }
 .lnote{ font-size:13px; color:var(--muted); text-align:center; margin:0 0 8px; }
 .tok.dim{ opacity:.45; }
 .nw{ white-space:nowrap; }
+#app:has(.dock .btn + .btn){ padding-bottom:calc(env(safe-area-inset-bottom) + 170px); }
 
 /* 演出は2つだけ：正解時の短い動き／ボス撃破 */
 .hit{ animation:hit .32s ease-out; }

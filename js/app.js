@@ -154,7 +154,7 @@ function showHome() {
 // ---- 基礎講座（1日1回、今日の5問の前に入る） ----
 function lessonNote() {
   const li = L.lessonDue(state, today(), LESSONS.length);
-  return li == null ? '' : `<p class="lnote">今日は基礎講座 第${li + 1}回（2〜3分）から始まる</p>`;
+  return li == null ? '' : `<p class="lnote">基礎講座 第${li + 1}回（2〜3分）から始まる</p>`;
 }
 function showLesson(li, k, shown = false) {
   const les = LESSONS[li], n = les.cards.length;
@@ -174,8 +174,12 @@ function showLesson(li, k, shown = false) {
       ${shown ? sentenceHTML(ex, { mark: 'all' }) + legend + `<dl class="kv"><dt>骨格訳</dt><dd>${esc(ex.skeleton_ja)}</dd><dt>模範訳</dt><dd>${esc(ex.model_ja)}</dd></dl>` : sentenceHTML(ex, {})}`;
     nextLabel = shown ? (les.focus.length ? 'この形を含む5問へ' : '今日の5問へ') : '形を見る';
   }
-  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button>`);
+  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button><button class="btn sub" id="lskip">この回はとばして5問へ</button>`);
   document.getElementById('quit').onclick = showHome;
+  document.getElementById('lskip').onclick = () => {
+    state = L.recordLesson(state, li, today(), null, { skipped: true }); save();
+    runSession();
+  };
   document.getElementById('lnext').onclick = () => {
     if (!shown) return showLesson(li, k, true);
     if (k < n) return showLesson(li, k + 1, false);

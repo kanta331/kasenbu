@@ -283,7 +283,7 @@ export function checkContent(c) {
 }
 
 // ---- 基礎講座 ----
-// 今日の5問の前に、1日1回だけ講座を1回分はさむ。全部終われば出ない。
+// 今日の5問を押すたびに、講座を1回分はさむ。全部終われば（とばした回も含む）出ない。
 const REL_WORDS = ['which', 'that', 'who', 'whom', 'whose', 'where', 'when', 'why'];
 const PREPS = ['in', 'on', 'of', 'for', 'with', 'to', 'by', 'from', 'at', 'under', 'through', 'about', 'into', 'upon', 'without', 'among', 'between', 'against', 'over', 'during'];
 const isW = t => /[A-Za-z]/.test(t);
@@ -307,12 +307,10 @@ export const EXAMPLE_RULES = {
   negcmp: s => (s.types ?? []).some(t => t === 'NEGCMP' || t === 'SOTHAT'),
   long: s => nWords(s) >= 22 && (s.spans ?? []).length >= 2,
 };
-/** 今日まだ講座をやっておらず、残りがあれば次の講座の番号。なければ null。 */
+/** 残りの講座があれば次の講座の番号。全部終わって（またはとばして）いれば null。押すたびに出す。 */
 export function lessonDue(state, today, total) {
-  const L = state.lessons ?? { next: 0, day: null };
-  if (L.next >= total) return null;
-  if (L.day === dayNumber(today)) return null;
-  return L.next;
+  const L = state.lessons ?? { next: 0 };
+  return L.next >= total ? null : L.next;
 }
 /** 講座の本物の例文。正本の文から、規則に合い、まだ講座で使っていない文を、短い順に。 */
 export function pickExample(content, state, rule) {
@@ -322,12 +320,13 @@ export function pickExample(content, state, rule) {
     .sort((a, b) => nWords(a) - nWords(b) || (a.id < b.id ? -1 : 1));
   return cands.find(s => !usedEx.has(s.id)) ?? cands[0] ?? null;
 }
-export function recordLesson(state, idx, today, exampleId = null) {
+export function recordLesson(state, idx, today, exampleId = null, { skipped = false } = {}) {
   const st = structuredClone(state);
   const L = st.lessons ??= { next: 0, day: null, examples: [] };
   L.examples ??= [];
   if (idx >= L.next) L.next = idx + 1;
   L.day = dayNumber(today);
   if (exampleId) L.examples.push(exampleId);
+  if (skipped) (L.skipped ??= []).push(idx);
   return st;
 }
