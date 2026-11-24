@@ -34,6 +34,7 @@ async function copy(text, msg = 'コピーした') {
   catch { const ta = document.createElement('textarea'); ta.className = 'copy'; ta.value = text; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
   toast(msg);
 }
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function view(html, dock = '') {
   $app.innerHTML = html + (dock ? `<div class="dock"><div>${dock}</div></div>` : '');
   window.scrollTo(0, 0);
@@ -219,6 +220,7 @@ function answer(a, el) {
     $app.querySelectorAll('[data-opt]').forEach(b => { if (q.opts[+b.dataset.opt].ok) b.classList.add('right'); });
   }
   if (!ok) el.classList.add(el.classList.contains('choice') ? 'wrong' : 'picked');
+  else el.classList.add('hit');
   $app.querySelectorAll('.tok.tap').forEach(t => t.classList.remove('tap'));
 
   state = L.recordAnswer(state, s, q.fmt, ok, today(), { err, review: q.review });
@@ -229,7 +231,7 @@ function answer(a, el) {
   const prev = (s.referents ?? []).find(r => r.sent);
   const prevS = prev ? byId(prev.sent) : null;
   document.getElementById('after').innerHTML = `
-    <div class="verdict">${ok ? '正解' : '不正解'}</div>
+    <div class="verdict${ok ? ' ok' : ''}">${ok ? '正解' : '不正解'}</div>
     ${!ok && yours ? `<div class="yours">あなたの選んだ読み：${yours}</div>` : ''}
     <div class="explain">
       ${prevS ? sentenceHTML(prevS, { prev: true, highlight: { refdst: range(prev.range) } }) : ''}
@@ -331,15 +333,21 @@ function checkBoss(b, sec, i, answers) {
 }
 function finishBoss(b, sec, answers) {
   const r = L.judgeBoss(b, answers, sec);
+  const before = L.defeatedCount(state);
   state = L.recordBoss(state, b, r, sec); save();
+  const after = L.defeatedCount(state);
   const why = r.defeated ? '' : [!r.skeletonOk ? '骨格の項目に「いいえ」がある' : '', !r.inTime ? `制限時間（${L.mmss(b.limit_sec)}）を超えた` : ''].filter(Boolean).join('／');
-  view(`<h1>${r.defeated ? '撃破' : '挑戦済み'}</h1>
+  view(`${r.defeated ? `<div class="slay"><h1>撃破</h1><div class="slaycount"><b id="slayn">${after > before ? before : after}</b><small>/20</small><span>骨格を取り切れた下線部</span></div></div>` : '<h1>挑戦済み</h1>'}
     <p class="muted">${b.year}年度 (${b.q})(${b.part})　所要 ${L.mmss(sec)}${why ? `　${why}` : ''}</p>
     ${r.missed.length ? `<h2>落とした項目</h2><ul class="plain">${r.missed.map(m => `<li>${esc(m.text)}</li>`).join('')}</ul>` : ''}
     ${!r.defeated ? `<p class="muted">次の5問で ${b.types.join('・')} を多く出す。</p>` : ''}
     <h2>模範訳</h2><p>${esc(b.model_ja)}</p>
     <p class="muted">この篇の文は、今後の解剖にも出る。</p>`,
     `<button class="btn" id="copy">添削に出す（文面をコピー）</button><button class="btn sub" id="home">ホーム</button>`);
+  if (r.defeated && after > before) setTimeout(() => {
+    const n = document.getElementById('slayn'); if (!n) return;
+    n.textContent = after; n.classList.add('tick');
+  }, reduced() ? 0 : 900);
   document.getElementById('copy').onclick = () => copy(L.bossCopyText(b, r, sec), 'コピーした。答案の写真と一緒に貼る');
   document.getElementById('home').onclick = showHome;
 }

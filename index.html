@@ -93,6 +93,24 @@ button{ font:inherit; color:inherit; }
 .kv dd{ margin:2px 0 0; line-height:1.7; font-size:16px; }
 .yours{ padding:10px 14px; border-left:4px solid var(--verb); background:var(--face); border-radius:6px; margin-top:10px; line-height:1.6; font-size:15px; }
 
+/* 演出は2つだけ：正解時の短い動き／ボス撃破 */
+.hit{ animation:hit .32s ease-out; }
+@keyframes hit{ 0%{ transform:scale(1); } 40%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
+.verdict.ok{ display:inline-block; position:relative; }
+.verdict.ok::after{ content:""; position:absolute; left:0; right:0; bottom:-3px; height:3px; background:var(--ink); transform-origin:left; animation:draw .35s ease-out both; }
+@keyframes draw{ from{ transform:scaleX(0); } to{ transform:scaleX(1); } }
+.slay{ text-align:center; padding:28px 0 8px; }
+.slay h1{ display:inline-block; position:relative; font-size:56px; letter-spacing:.2em; margin:0 0 0 .2em; animation:rise .5s ease-out both; }
+.slay h1::after{ content:""; position:absolute; left:-.1em; right:.1em; bottom:-6px; height:6px; background:var(--ink); transform-origin:left; animation:draw .45s .45s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes rise{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+.slaycount{ margin-top:22px; animation:rise .4s .7s ease-out both; }
+.slaycount b{ display:inline-block; font-size:40px; font-variant-numeric:tabular-nums; }
+.slaycount small{ font-size:18px; font-weight:700; }
+.slaycount span{ display:block; font-size:13px; color:var(--muted); margin-top:2px; }
+.slaycount b.tick{ animation:tick .4s ease-out; }
+@keyframes tick{ 0%{ transform:translateY(-12px); opacity:0; } 100%{ transform:none; opacity:1; } }
+@media (prefers-reduced-motion:reduce){ .hit,.verdict.ok::after,.slay h1,.slay h1::after,.slaycount,.slaycount b.tick{ animation:none; } }
+
 /* ボス戦 */
 .timer{ position:sticky; top:0; background:var(--bg); padding:8px 0; font-size:44px; font-weight:800; font-variant-numeric:tabular-nums; text-align:center; z-index:2; }
 .timer.over{ color:var(--verb); }
