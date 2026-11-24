@@ -1,6 +1,7 @@
 // 画面。状態の計算は logic.js、保存は db.js。
 import * as L from './logic.js';
 import * as DB from './db.js';
+import { LESSONS, exampleHTML } from './lessons.js';
 
 const $app = document.getElementById('app');
 const KIND_OPEN = { INS: '[', default: '(' }, KIND_CLOSE = { INS: ']', default: ')' };
@@ -73,7 +74,7 @@ function sentenceHTML(s, opts = {}) {
   let html = '';
   toks.forEach((x, k) => {
     const i = x.i;
-    if (k > 0 && x.ws) html += ' ';
+    if (k > 0 && x.ws) html += '</span> <span class="nw">';   // 句読点・括弧は前後の語と離さない
     if (i != null) html += opens[i].map(b => `<span class="br">${b}</span>`).join('');
     const c = i != null ? [...cls[i]] : [];
     if (x.hole) c.push('hole');
@@ -82,7 +83,7 @@ function sentenceHTML(s, opts = {}) {
     html += `<span class="tok ${c.join(' ')}"${tap ? ` data-i="${i}"${opts.sid ? ` data-sid="${opts.sid}"` : ''}` : ''}>${esc(x.t)}</span>`;
     if (i != null) html += closes[i].map(b => `<span class="br">${b}</span>`).join('');
   });
-  return `<div class="sent${opts.prev ? ' prev' : ''}">${html}</div>`;
+  return `<div class="sent${opts.prev ? ' prev' : ''}"><span class="nw">${html}</span></div>`;
 }
 /** 形式F：難語の範囲を〔？〕1つにまとめたトークン列 */
 function holeTokens(s) {
@@ -144,16 +145,64 @@ function showHome() {
       <div class="stat"><b>${L.defeatedCount(state)}<small style="font-size:16px">/20</small></b><span>骨格を取り切れた下線部（合格ライン（推定）${L.PASS_LINE}）</span></div>
     </div>
     ${grid}`,
-    `<button class="btn" id="go">今日の5問</button>`);
+    `${lessonNote()}<button class="btn" id="go">今日の5問</button>`);
   document.getElementById('go').onclick = startSession;
   document.getElementById('export').onclick = showExport;
   $app.querySelectorAll('[data-boss]').forEach(el => el.onclick = () => showBossIntro(bosses.get(el.dataset.boss)));
 }
 
+// ---- 基礎講座（1日1回、今日の5問の前に入る） ----
+function lessonNote() {
+  const li = L.lessonDue(state, today(), LESSONS.length);
+  return li == null ? '' : `<p class="lnote">今日は基礎講座 第${li + 1}回（2〜3分）から始まる</p>`;
+}
+function showLesson(li, k, shown = false) {
+  const les = LESSONS[li], n = les.cards.length;
+  const head = `<div class="qhead"><span>基礎講座 ${li + 1} / ${LESSONS.length}</span><button class="link" id="quit" style="padding:0">やめる</button></div>
+    <h1 class="ltitle">${esc(les.title)}</h1>${k === 0 ? `<p class="lgoal">${esc(les.goal)}</p>` : ''}`;
+  let body, nextLabel, exId = null;
+  if (k < n) {
+    const c = les.cards[k];
+    body = `<p class="lsay">${esc(c.say)}</p>${exampleHTML(c.ex, { plain: !shown })}
+      ${shown ? `<p class="lja">${esc(c.ja)}</p>${legendFor(c.ex)}` : ''}`;
+    nextLabel = shown ? '次へ' : '形を見る';
+  } else {
+    const ex = L.pickExample(content, state, les.real);
+    if (!ex) return finishLesson(li, null);
+    exId = ex.id;
+    body = `<p class="lsay">本物の文（正本${ex.source.no}番）。${esc(les.realSay)}</p>
+      ${shown ? sentenceHTML(ex, { mark: 'all' }) + legend + `<dl class="kv"><dt>骨格訳</dt><dd>${esc(ex.skeleton_ja)}</dd><dt>模範訳</dt><dd>${esc(ex.model_ja)}</dd></dl>` : sentenceHTML(ex, {})}`;
+    nextLabel = shown ? (les.focus.length ? 'この形を含む5問へ' : '今日の5問へ') : '形を見る';
+  }
+  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button>`);
+  document.getElementById('quit').onclick = showHome;
+  document.getElementById('lnext').onclick = () => {
+    if (!shown) return showLesson(li, k, true);
+    if (k < n) return showLesson(li, k + 1, false);
+    finishLesson(li, exId);
+  };
+}
+function finishLesson(li, exId) {
+  state = L.recordLesson(state, li, today(), exId); save();
+  runSession(LESSONS[li].focus);
+}
+/** 作例に出てくる色だけの凡例 */
+function legendFor(src) {
+  const items = [['[s', 'subj', '下線＝主語（だれが・何が）'], ['[v', 'verb', '太字＝述語動詞（どうする・どうだ）'], ['(', 'clause', '( )＝説明のかたまり'], ['{', 'clause', '[ ]＝割り込み'], ['[r', 'ref', '紫＝指示語と指す先'], ['[l', 'logic', '金＝論理語']];
+  const toks = src.split(/\s+/);
+  const has = items.filter(([m]) => toks.includes(m));
+  return has.length ? `<div class="legend">${has.map(([, c, t]) => `<i style="color:var(--${c})">${t}</i>`).join('　')}</div>` : '';
+}
+
 // ---- 解剖（5問） ----
 let session = null;
 function startSession() {
-  const qs = L.selectSession(content, state, today());
+  const li = L.lessonDue(state, today(), LESSONS.length);
+  if (li != null) return showLesson(li, 0);
+  runSession();
+}
+function runSession(focus = []) {
+  const qs = L.selectSession(content, state, today(), Date.now(), { focus });
   if (!qs.length) return toast('出せる文がない');
   session = { qs, k: 0, results: [] };
   showQuestion();

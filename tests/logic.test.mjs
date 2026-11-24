@@ -173,3 +173,63 @@ test('答えが1つに決まらない形式（skip）は出さない', () => {
   assert.ok(!L.applicableFormats(s).includes('A'));
   assert.ok(L.applicableFormats(s).includes('B'));
 });
+
+// ---- 基礎講座 ----
+import { LESSONS, exampleHTML } from '../js/lessons.js';
+
+test('基礎講座：1日1回だけ、順番に、全部終われば出ない', () => {
+  let st = L.emptyState();
+  assert.equal(L.lessonDue(st, TODAY, 3), 0);
+  st = L.recordLesson(st, 0, TODAY, 'S001-1');
+  assert.equal(L.lessonDue(st, TODAY, 3), null);          // 同じ日は2回目なし
+  assert.equal(L.lessonDue(st, '2026-12-02', 3), 1);
+  st = L.recordLesson(st, 1, '2026-12-02');
+  st = L.recordLesson(st, 2, '2026-12-03');
+  assert.equal(L.lessonDue(st, '2026-12-04', 3), null);   // 全部終わった
+  assert.deepEqual(st.lessons.examples, ['S001-1']);
+  const old = L.emptyState(); delete old.lessons;          // 講座のない古い保存データ
+  assert.equal(L.lessonDue(old, TODAY, 3), 0);
+});
+
+test('基礎講座：本物の文は正本から、規則に合う短い順、使った文は避ける', () => {
+  const mk = (id, n, kind = 'seihon', extra = {}) => ({ id, source: { kind, no: 1 }, tokens: tok(n), main: { s: [0, 0], v: [1, 1] }, spans: [], ...extra });
+  const c = { sentences: [mk('S1', 9), mk('S2', 6), mk('K1', 5, 'kakomon'), mk('S3', 6, 'seihon', { status: 'hold' }), mk('S4', 20)], bosses: [] };
+  let st = L.emptyState();
+  assert.equal(L.pickExample(c, st, 'short').id, 'S2');
+  st = L.recordLesson(st, 0, TODAY, 'S2');
+  assert.equal(L.pickExample(c, st, 'short').id, 'S1');
+  assert.equal(L.pickExample(c, st, 'nouncl'), null);
+});
+
+test('基礎講座：規則がそろい、作例の括弧が閉じている', () => {
+  assert.equal(LESSONS.length, 15);
+  for (const les of LESSONS) {
+    assert.ok(L.EXAMPLE_RULES[les.real], les.title);
+    for (const c of les.cards) {
+      const t = c.ex.split(/\s+/);
+      const open = t.filter(x => /^\[[svmrdl]$/.test(x)).length, close = t.filter(x => x === ']').length;
+      assert.equal(open, close, c.ex);
+      assert.equal(t.filter(x => x === '(').length, t.filter(x => x === ')').length, c.ex);
+      assert.equal(t.filter(x => x === '{').length, t.filter(x => x === '}').length, c.ex);
+      assert.ok(c.say && c.ja, les.title);
+    }
+  }
+  const h = exampleHTML('[s The book ( which I bought ) ] [v is ] old .');
+  assert.match(h, /tok subj">book/);
+  assert.match(h, /tok verb">is/);
+  assert.match(h, /old<\/span><span class="tok ">\.<\/span>/);
+  assert.doesNotMatch(exampleHTML('[s A ] ( b )', { plain: true }), /subj|\(/);
+});
+
+test('基礎講座の型を重く出す（focus）', () => {
+  const many = Array.from({ length: 30 }, (_, k) => ({ ...full(`S0${10 + k}-1`), types: ['REL'] }));
+  const target = { ...full('S090-1'), types: ['NOUNCL'] };
+  const count = focus => {
+    let n = 0;
+    for (let seed = 1; seed <= 200; seed++)
+      if (L.selectSession(content([...many, target]), L.emptyState(), TODAY, seed, { focus }).some(q => q.sid === 'S090-1')) n++;
+    return n;
+  };
+  const without = count([]), withF = count(['NOUNCL']);
+  assert.ok(withF > without * 1.5, `focus なし ${without} / あり ${withF}`);
+});

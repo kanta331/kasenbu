@@ -91,6 +91,7 @@ export function emptyState() {
     boost: [],        // ボス戦で落とした型。次の5問で多く出す
     log: [],          // { t, sid, fmt, ok, err }
     flags: [],        // 「この解析はおかしい」が押された文ID
+    lessons: { next: 0, day: null, examples: [] },  // 基礎講座の進み具合
   };
 }
 const typeAcc = (state, t) => { const x = state.typeStats[t]; return x && x.n ? x.ok / x.n : 0.5; };
@@ -98,11 +99,12 @@ const fmtRec = (state, sid, fmt) => state.items[sid]?.fmt?.[fmt];
 const graduated = (state, sid, fmt) => !!fmtRec(state, sid, fmt)?.graduated;
 
 /** 文の重み。次のボスの型・ボス戦で落とした型・正答率の低い型を多く、見たことのない文を少し多く。 */
-function sentenceWeight(s, state, bossTypes) {
+function sentenceWeight(s, state, bossTypes, focus = []) {
   let w = 1;
   for (const t of s.types ?? []) {
     w += (1 - typeAcc(state, t)) * 1.5;
     if (bossTypes.has(t)) w += 2;
+    if (focus.includes(t)) w += 4;
     if (state.boost.includes(t)) w += 3;
   }
   if (!state.items[s.id]?.seen) w += 1;
@@ -123,7 +125,7 @@ function chooseFormat(s, state, rand, { avoid = null, prefer = null } = {}) {
  * - 復習は前回と別の形式
  * - 同じ回に同じ文は出さない
  */
-export function selectSession(content, state, today, seed = Date.now()) {
+export function selectSession(content, state, today, seed = Date.now(), { focus = [] } = {}) {
   const rand = rng(seed), day = dayNumber(today);
   const pool = eligibleSentences(content, state);
   const byId = new Map(content.sentences.map(s => [s.id, s]));
@@ -145,7 +147,7 @@ export function selectSession(content, state, today, seed = Date.now()) {
   // 2) 形式F を1問は入れる
   if (!out.some(q => q.fmt === 'F')) {
     const cands = pool.filter(s => !used.has(s.id) && applicableFormats(s).includes('F') && !graduated(state, s.id, 'F'));
-    const s = pickWeighted(cands, x => sentenceWeight(x, state, bossTypes), rand);
+    const s = pickWeighted(cands, x => sentenceWeight(x, state, bossTypes, focus), rand);
     if (s) { out.push({ sid: s.id, fmt: 'F', review: false }); used.add(s.id); }
   }
 
@@ -154,7 +156,7 @@ export function selectSession(content, state, today, seed = Date.now()) {
   while (out.length < SESSION_SIZE && guard++ < 200) {
     const cands = pool.filter(s => !used.has(s.id) && applicableFormats(s).some(f => !graduated(state, s.id, f)));
     if (!cands.length) break;
-    const s = pickWeighted(cands, x => sentenceWeight(x, state, bossTypes), rand);
+    const s = pickWeighted(cands, x => sentenceWeight(x, state, bossTypes, focus), rand);
     const fmt = chooseFormat(s, state, rand);
     if (!fmt) { used.add(s.id); continue; }
     out.push({ sid: s.id, fmt, review: false }); used.add(s.id);
@@ -278,4 +280,54 @@ export function checkContent(c) {
   const bad = c.sentences.find(s => !s.id || !Array.isArray(s.tokens) || !s.main);
   if (bad) return `文の形が違います: ${bad.id ?? '(IDなし)'}`;
   return null;
+}
+
+// ---- 基礎講座 ----
+// 今日の5問の前に、1日1回だけ講座を1回分はさむ。全部終われば出ない。
+const REL_WORDS = ['which', 'that', 'who', 'whom', 'whose', 'where', 'when', 'why'];
+const PREPS = ['in', 'on', 'of', 'for', 'with', 'to', 'by', 'from', 'at', 'under', 'through', 'about', 'into', 'upon', 'without', 'among', 'between', 'against', 'over', 'during'];
+const isW = t => /[A-Za-z]/.test(t);
+const nWords = s => s.tokens.filter(isW).length;
+const lower = (s, i) => (s.tokens[i] ?? '').toLowerCase();
+const spansOf = (s, k) => (s.spans ?? []).filter(x => x.kind === k);
+/** 講座の「本物の文」を選ぶ規則。キーは lessons.js の real。 */
+export const EXAMPLE_RULES = {
+  short: s => !!s.main.s && nWords(s) >= 5 && nWords(s) <= 12 && !(s.spans ?? []).length,
+  verbs: s => !!s.main.s && nWords(s) >= 5 && nWords(s) <= 14 && s.main.v[1] > s.main.v[0],
+  longsubj: s => !!s.main.s && s.tokens.slice(s.main.s[0], s.main.s[1] + 1).filter(isW).length >= 4 && nWords(s) <= 20,
+  relword: s => spansOf(s, 'REL').some(x => REL_WORDS.includes(lower(s, x.range[0]))),
+  contact: s => spansOf(s, 'REL').some(x => !REL_WORDS.includes(lower(s, x.range[0])) && !PREPS.includes(lower(s, x.range[0]))),
+  prepwh: s => spansOf(s, 'REL').some(x => PREPS.includes(lower(s, x.range[0])) && ['which', 'whom'].includes(lower(s, x.range[0] + 1))),
+  postptc: s => spansOf(s, 'PTC').some(x => x.head != null),
+  ins: s => spansOf(s, 'INS').length > 0,
+  nouncl: s => spansOf(s, 'NOUNCL').length > 0,
+  ref: s => (s.referents ?? []).some(r => !r.sent),
+  conn: s => (s.connectors ?? []).length > 0,
+  leadptc: s => spansOf(s, 'PTC').some(x => x.head == null) || ((s.types ?? []).includes('PTC') && !spansOf(s, 'PTC').length),
+  negcmp: s => (s.types ?? []).some(t => t === 'NEGCMP' || t === 'SOTHAT'),
+  long: s => nWords(s) >= 22 && (s.spans ?? []).length >= 2,
+};
+/** 今日まだ講座をやっておらず、残りがあれば次の講座の番号。なければ null。 */
+export function lessonDue(state, today, total) {
+  const L = state.lessons ?? { next: 0, day: null };
+  if (L.next >= total) return null;
+  if (L.day === dayNumber(today)) return null;
+  return L.next;
+}
+/** 講座の本物の例文。正本の文から、規則に合い、まだ講座で使っていない文を、短い順に。 */
+export function pickExample(content, state, rule) {
+  const f = EXAMPLE_RULES[rule]; if (!f) return null;
+  const usedEx = new Set(state.lessons?.examples ?? []);
+  const cands = content.sentences.filter(s => s.status !== 'hold' && s.source.kind === 'seihon' && f(s))
+    .sort((a, b) => nWords(a) - nWords(b) || (a.id < b.id ? -1 : 1));
+  return cands.find(s => !usedEx.has(s.id)) ?? cands[0] ?? null;
+}
+export function recordLesson(state, idx, today, exampleId = null) {
+  const st = structuredClone(state);
+  const L = st.lessons ??= { next: 0, day: null, examples: [] };
+  L.examples ??= [];
+  if (idx >= L.next) L.next = idx + 1;
+  L.day = dayNumber(today);
+  if (exampleId) L.examples.push(exampleId);
+  return st;
 }
