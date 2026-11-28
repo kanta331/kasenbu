@@ -246,3 +246,31 @@ test('基礎講座の状態：終えた・とばした・まだ。とばした�
   assert.equal(L.lessonStatus(st, 1), 'done');
   assert.equal(L.lessonDue(st, TODAY, 15), 2);           // 次の回は変わらない
 });
+
+// ---- Claude先生 ----
+import * as T from '../js/sensei.js';
+
+test('先生：前提に文・骨格・あなたの答え・誤読を入れ、下書きは形式ごと', () => {
+  const s = { ...full('S038-2'), source: { kind: 'seihon', no: 38 }, text: 'w0 w1 w2' };
+  const info = { fmt: 'A', mine: '主語＝「w0 w1」', right: '主語＝「w0」', err: 'E1', errName: '節を閉じずに' };
+  const c = T.senseiContext(s, info);
+  assert.match(c, /文：w0 w1 w2/);
+  assert.match(c, /必修英文100題 38番/);
+  assert.match(c, /主節の述語動詞：「/);
+  assert.match(c, /KANTAくんの答え：主語＝「w0 w1」/);
+  assert.match(c, /誤読の種類：E1/);
+  assert.equal(T.draftQuestion(info), '先生、主語を「w0 w1」までだと思ったんですけど、なんでちがうんですか');
+  assert.match(T.draftQuestion({ fmt: 'F', mine: 'ちがう訳' }), /「ちがう訳」の訳を選んだ/);
+});
+
+test('先生：送る会話は KANTAくんから始め、直前の1件にキャッシュの印', () => {
+  const msgs = [{ role: 'assistant', content: 'a0' }, { role: 'user', content: 'u1' }, { role: 'assistant', content: 'a1' }, { role: 'user', content: 'u2' }];
+  const p = T.chatPayload(msgs);
+  assert.equal(p[0].role, 'user');
+  assert.equal(p.length, 3);
+  assert.equal(p[1].content[0].cache_control.type, 'ephemeral');
+  assert.equal(p[2].content, 'u2');
+  const sys = T.systemBlocks('文：x');
+  assert.equal(sys[0].cache_control.type, 'ephemeral');
+  assert.match(sys[1].text, /【問題の文】/);
+});

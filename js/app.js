@@ -2,6 +2,7 @@
 import * as L from './logic.js';
 import * as DB from './db.js';
 import { LESSONS, exampleHTML } from './lessons.js';
+import * as T from './sensei.js';
 
 const $app = document.getElementById('app');
 const KIND_OPEN = { INS: '[', default: '(' }, KIND_CLOSE = { INS: ']', default: ')' };
@@ -299,7 +300,9 @@ function answer(a, el) {
 
   state = L.recordAnswer(state, s, q.fmt, ok, today(), { err, review: q.review });
   save();
-  session.results.push({ sid: s.id, fmt: q.fmt, ok });
+  const info = ok ? null : { fmt: q.fmt, mine: plain(yours.split('<br>')[0]).replace(/（これは.*$/, ''), right: rightAnswer(s, q.fmt), err: q.fmt === 'F' ? err : L.FORMAT_ERROR[q.fmt] };
+  if (info) info.errName = ERROR_NAME[info.err];
+  session.results.push({ sid: s.id, fmt: q.fmt, ok, info });
 
   const hard = (s.hard ?? []).map(h => `${esc(L.joinTokens(s, h.range[0], h.range[1]))}：${esc(h.ja)}`).join('<br>');
   const prev = (s.referents ?? []).find(r => r.sent);
@@ -317,7 +320,9 @@ function answer(a, el) {
         ${s.note ? `<dt>構造</dt><dd>${esc(s.note)}</dd>` : ''}
       </dl>
       <button class="link" id="flag">この解析はおかしい</button><span class="muted">${s.id}</span>
-    </div>`;
+    </div>
+    ${info && canAsk(s) ? senseiBoxHTML(s.id) : ''}`;
+  if (info && canAsk(s)) bindSensei(document.querySelector('.chat'), s, info);
   document.getElementById('flag').onclick = e => { state.flags.push(s.id); save(); e.target.textContent = '記録した（書き出しで送れる）'; e.target.disabled = true; };
   document.querySelector('.verdict').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const last = session.k === session.qs.length - 1;
@@ -326,15 +331,111 @@ function answer(a, el) {
   $app.append(dock);
   document.getElementById('next').onclick = () => { if (last) showSummary(); else { session.k++; showQuestion(); } };
 }
+// ---- Claude先生（間違えた文について聞く。ネットと APIキーが要る） ----
+const plain = h => String(h).replace(/<br>/g, ' ').replace(/<[^>]+>/g, '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+/** 封印中の文は先生にも送らない */
+const canAsk = s => !!s && (s.source.kind === 'seihon' || L.isUnsealed(s.source.year, today()));
+function rightAnswer(s, fmt) {
+  const m = s.main;
+  if (fmt === 'A') return m.s ? `主語＝「${L.joinTokens(s, m.s[0], m.s[1])}」` : '';
+  if (fmt === 'B') return `述語＝「${L.joinTokens(s, m.v[0], m.v[1])}」`;
+  if (fmt === 'C') { const sp = L.closableSpan(s); return sp ? `節＝（${L.joinTokens(s, sp.range[0], sp.range[1])}）` : ''; }
+  if (fmt === 'D') { const r = L.referentFor(s); const src = r.sent ? byId(r.sent) : s; return `「${s.tokens[r.token]}」＝「${L.joinTokens(src, r.range[0], r.range[1])}」`; }
+  if (fmt === 'E') { const c = s.connectors[0]; return `「${c.word}」＝${c.logic}`; }
+  if (fmt === 'F') return s.model_ja;
+  return '';
+}
+const CHATS = 'kasenbu:chats';
+const loadChats = () => { try { const o = JSON.parse(localStorage.getItem(CHATS)); return o && typeof o === 'object' ? o : {}; } catch { return {}; } };
+const saveChats = o => { try { localStorage.setItem(CHATS, JSON.stringify(o)); } catch {} };
+function bubble(who, text, extra = '') {
+  return `<div class="msg ${who} ${extra}"><span class="av" aria-hidden="true">${who === 'k' ? 'K' : '先'}</span><div class="bub"><span class="who">${who === 'k' ? 'KANTAくん' : 'Claude先生'}</span><p>${esc(text)}</p></div></div>`;
+}
+function senseiBoxHTML(sid) {
+  return `<div class="chat" data-sid="${sid}">
+    <div class="chat-h">Claude先生に聞く</div>
+    <div class="chat-log" aria-live="polite"></div>
+    <div class="chat-key" hidden>
+      <p class="muted">先生に聞くには Anthropic の APIキーが要る。キーはこの端末の中だけに保存し、先生に聞いたときだけ Anthropic に送る。</p>
+      <input type="password" autocomplete="off" placeholder="sk-ant-…" aria-label="APIキー"><button class="btn sub keysave">キーを保存</button>
+    </div>
+    <form><textarea rows="3" maxlength="300" aria-label="先生への質問"></textarea><button type="submit" class="btn">送信</button></form>
+    <button class="link chat-clear" type="button" hidden>この文の会話を消す</button>
+  </div>`;
+}
+function bindSensei(box, s, info) {
+  const log = box.querySelector('.chat-log'), form = box.querySelector('form'), ta = form.querySelector('textarea'), btn = form.querySelector('button');
+  const keyBox = box.querySelector('.chat-key'), clear = box.querySelector('.chat-clear');
+  const prevRef = (s.referents ?? []).find(r => r.sent), prev = prevRef ? byId(prevRef.sent) : null;
+  let saved = loadChats()[s.id] ?? [], busy = false;
+  const render = () => { log.innerHTML = saved.map(m => bubble(m.role === 'user' ? 'k' : 't', m.content)).join(''); clear.hidden = !saved.length; };
+  const net = () => {
+    const off = !T.online();
+    keyBox.hidden = !!T.apiKey();
+    btn.disabled = off || busy || !T.apiKey();
+    btn.textContent = off ? '圏外' : busy ? '先生が読んでいます…' : '送信';
+  };
+  render(); net();
+  ta.value = T.draftQuestion(info);
+  window.addEventListener('online', net); window.addEventListener('offline', net);
+  keyBox.querySelector('.keysave').onclick = () => {
+    const inp = keyBox.querySelector('input'), k = inp.value.trim(); inp.value = '';
+    if (!k) return;
+    T.setKey(k); net(); toast('キーを保存した');
+  };
+  clear.onclick = () => {
+    if (busy || !confirm('この文の先生との会話を消します')) return;
+    const all = loadChats(); delete all[s.id]; saveChats(all); saved = []; render();
+  };
+  const add = html => { log.insertAdjacentHTML('beforeend', html); const el = log.lastElementChild; el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return el; };
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const q = ta.value.trim();
+    if (busy || !q || !T.online() || !T.apiKey()) return;
+    ta.value = '';
+    add(bubble('k', q, 'new'));
+    busy = true; net();
+    const typing = add(bubble('t', '…', 'typing'));
+    const msgs = saved.map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: q }]);
+    try {
+      const text = (await T.callClaude(T.systemBlocks(T.senseiContext(s, info, prev)), T.chatPayload(msgs))) || '（答えが空でした）';
+      typing.remove();
+      add(bubble('t', text, 'new'));
+      const now = Date.now(), all = loadChats();
+      saved = saved.concat([{ role: 'user', content: q, at: now }, { role: 'assistant', content: text, at: now }]).slice(-T.CHAT_KEEP);
+      all[s.id] = saved; saveChats(all); clear.hidden = false;
+    } catch (err) {
+      typing.remove();
+      ta.value = q;   // 答えられなかった質問は会話に残さず、入力欄に戻す
+      add(bubble('t', err.status === 'refusal' ? err.message
+        : err.status === 401 ? 'キーが正しくないようです。書き出し画面の「APIキーを消す」から入れ直してください。'
+        : err.status ? `うまく答えられませんでした（${err.status}：${err.message}）` : '通信できませんでした。もう一度送ってください', 'err'));
+    }
+    busy = false; net();
+  };
+}
+
 const range = r => Array.from({ length: r[1] - r[0] + 1 }, (_, i) => r[0] + i);
 
 function showSummary() {
   const r = session.results;
   view(`<h1>${r.filter(x => x.ok).length} / ${r.length}</h1>
-    <ul class="plain">${r.map(x => `<li>${x.ok ? '○' : '×'}　形式${x.fmt}　<span class="muted">${x.sid}</span></li>`).join('')}</ul>`,
+    <ul class="plain">${r.map((x, i) => `<li>${x.ok ? '○' : '×'}　形式${x.fmt}　<span class="muted">${x.sid}</span>${!x.ok && x.info && canAsk(byId(x.sid)) ? `　<button class="link ask" data-ask="${i}">Claude先生に聞く</button>` : ''}</li>`).join('')}</ul>`,
     `<button class="btn" id="again">もう一度5問</button><button class="btn sub" id="home">ホーム</button>`);
   document.getElementById('again').onclick = startSession;
   document.getElementById('home').onclick = showHome;
+  $app.querySelectorAll('[data-ask]').forEach(el => el.onclick = () => showSensei(r[+el.dataset.ask]));
+}
+/** 結果画面から開く先生の画面：文の解析を上に、会話を下に */
+function showSensei(res) {
+  const s = byId(res.sid);
+  view(`<div class="qhead"><span>Claude先生に聞く　形式${res.fmt}</span><span class="muted">${s.id}</span></div>
+    ${sentenceHTML(s, { mark: 'all' })}${legend}
+    <dl class="kv"><dt>あなたの答え</dt><dd>${esc(res.info.mine)}</dd><dt>骨格訳</dt><dd>${esc(s.skeleton_ja)}</dd><dt>模範訳</dt><dd>${esc(s.model_ja)}</dd></dl>
+    ${senseiBoxHTML(s.id)}`, `<button class="btn sub" id="back">結果に戻る</button>`);
+  bindSensei(document.querySelector('.chat'), s, res.info);
+  document.getElementById('back').onclick = showSummary;
 }
 
 // ---- ボス戦 ----
@@ -431,10 +532,11 @@ function showExport() {
   const inbox = L.inboxLines(content, state);
   view(`<h1>書き出し</h1>
     <p class="muted">週報：今週の回数、正答率の低い型、多い誤読、ボスの状態、「おかしい」と押した文。<br>受け箱：解剖で間違えた文の難語（${inbox.length}語）。eitango に貼る。</p>`,
-    `<button class="btn" id="week">週報をコピー</button><button class="btn sub" id="inbox">受け箱をコピー（${inbox.length}語）</button><button class="btn sub" id="load">コンテンツを入れ替える</button><button class="btn sub" id="home">戻る</button>`);
+    `<button class="btn" id="week">週報をコピー</button><button class="btn sub" id="inbox">受け箱をコピー（${inbox.length}語）</button><button class="btn sub" id="load">コンテンツを入れ替える</button>${T.apiKey() ? '<button class="btn sub" id="forget">APIキーを消す</button>' : ''}<button class="btn sub" id="home">戻る</button>`);
   document.getElementById('week').onclick = () => copy(L.weeklyText(content, state));
   document.getElementById('inbox').onclick = () => inbox.length ? copy(inbox.join('\n')) : toast('まだない');
   document.getElementById('load').onclick = () => showLoad();
+  document.getElementById('forget')?.addEventListener('click', () => { if (confirm('この端末に保存した APIキーを消します')) { T.setKey(''); toast('キーを消した'); showExport(); } });
   document.getElementById('home').onclick = showHome;
 }
 

@@ -98,7 +98,7 @@ button{ font:inherit; color:inherit; }
 .lgoal{ color:var(--muted); margin:0 0 10px; font-size:14px; }
 .lsay{ font-size:17px; line-height:1.85; margin:8px 0 14px; }
 .lja{ font-size:17px; line-height:1.7; margin:12px 2px 0; }
-.lnote{ font-size:13px; color:var(--muted); text-align:center; margin:0 0 8px; }
+.lnote{ font-size:13px; color:var(--muted); text-align:center; margin:0 auto 8px; background:var(--bg); width:fit-content; padding:2px 10px; border-radius:8px; }
 .tok.dim{ opacity:.45; }
 .nw{ white-space:nowrap; }
 .llist{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
@@ -108,6 +108,28 @@ button{ font:inherit; color:inherit; }
 .lname{ flex:1; line-height:1.5; }
 .lst{ font-size:12px; color:var(--muted); white-space:nowrap; }
 .lst.done{ color:var(--ink); font-weight:700; }
+
+/* Claude先生（LINE 風。右＝KANTAくん、左＝先生。色は使わない） */
+.chat{ margin-top:22px; padding-top:14px; border-top:1px solid var(--line); }
+.chat-h{ font-size:14px; font-weight:700; margin-bottom:10px; }
+.chat-log{ display:flex; flex-direction:column; gap:10px; margin-bottom:10px; }
+.msg{ display:flex; gap:8px; align-items:flex-start; }
+.msg.k{ flex-direction:row-reverse; }
+.msg .av{ flex:none; width:30px; height:30px; border-radius:50%; border:1.5px solid var(--line); display:grid; place-items:center; font-size:13px; font-weight:700; color:var(--muted); background:var(--face); }
+.msg .bub{ max-width:80%; }
+.msg .who{ display:block; font-size:11px; color:var(--muted); margin:0 4px 2px; }
+.msg.k .who{ text-align:right; }
+.msg p{ margin:0; padding:10px 12px; border-radius:16px; line-height:1.7; font-size:15px; background:var(--face); border:1px solid var(--line); white-space:pre-wrap; }
+.msg.k p{ background:var(--btn); color:var(--btnink); border-color:var(--btn); }
+.msg.typing p{ color:var(--muted); }
+.msg.err p{ color:var(--muted); font-size:13px; }
+.chat form{ display:grid; gap:8px; }
+.chat textarea{ width:100%; font:inherit; font-size:16px; line-height:1.6; padding:10px 12px; border:1.5px solid var(--line); border-radius:12px; background:var(--face); color:var(--ink); resize:vertical; }
+.chat .btn{ min-height:48px; font-size:16px; }
+.chat-key{ display:grid; gap:8px; margin-bottom:10px; }
+.chat-key[hidden]{ display:none; }
+.chat-key input{ font-size:16px; padding:10px 12px; border:1.5px solid var(--line); border-radius:12px; background:var(--face); color:var(--ink); }
+.link.ask{ padding:0 2px; }
 #app:has(.dock .btn + .btn){ padding-bottom:calc(env(safe-area-inset-bottom) + 170px); }
 
 /* 演出は2つだけ：正解時の短い動き／ボス撃破 */
