@@ -1,6 +1,6 @@
 /* オフライン用。アプリ本体とデータは先に保存し、開くたびに裏で新しいものに入れ替える。
    中身を更新して公開するときは VERSION を上げる。 */
-var VERSION = 'v11';
+var VERSION = 'v12';
 var CACHE = 'ktango-' + VERSION;   // 下線部の中の版。元の eitango（'eitango-'）と分ける
 var SHELL = [
   './',

@@ -274,3 +274,37 @@ test('先生：送る会話は KANTAくんから始め、直前の1件にキャ�
   assert.equal(sys[0].cache_control.type, 'ephemeral');
   assert.match(sys[1].text, /【問題の文】/);
 });
+
+// ---- 受け箱を単語カードへ ----
+import fs from 'node:fs';
+
+test('受け箱：まだ送っていない分だけを送る', () => {
+  const s = { ...full('S038-2'), source: { kind: 'seihon', no: 38 }, text: 'w0 w1' };
+  let st = L.recordAnswer(L.emptyState(), s, 'F', false, TODAY, { err: 'E4' });
+  const ents = L.inboxToSend(content([s]), st);
+  assert.equal(ents.length, 1);
+  assert.deepEqual([ents[0].word, ents[0].tr, ents[0].meaning], ['w10', 'TR38', '語']);
+  st = { ...st, inboxSent: [ents[0].key] };
+  assert.equal(L.inboxToSend(content([s]), st).length, 0);
+});
+
+test('中の eitango：受け箱をカードに重ねる決まり（apply_words.py と同じ）', () => {
+  const html = fs.readFileSync(new URL('../eitango/index.html', import.meta.url), 'utf8');
+  const a = html.indexOf('function inboxNorm'), b = html.indexOf('\n  S=load();', a);
+  const applyInbox = new Function(html.slice(a, b) + '\nreturn applyInbox;')();
+  const cards = [
+    { id: 'observe', word: 'observe', set: 'list', senses: ['観察する'], status: 'approved' },
+    { id: 'thus-tr2', word: 'thus', set: 'tr', tr: 'TR2', status: 'approved' },
+  ];
+  const n = applyInbox(cards, [
+    { word: 'observe', tr: 'TR38', sentence: 's1', meaning: '気づく' },        // 初級に統合
+    { word: 'thus', tr: 'TR2', sentence: 's2', meaning: 'このように' },        // tr を met に昇格
+    { word: 'vocation', tr: 'K2024-1b', sentence: 's3', meaning: '天職' },     // 新規
+    { word: 'observe', tr: 'TR38', sentence: 's1', meaning: '気づく' },        // 同じものは重ねない
+    { word: '', meaning: 'x' },                                                // 形式不正は飛ばす
+  ]);
+  assert.equal(n, 3);
+  assert.equal(cards[0].set, 'met'); assert.deepEqual(cards[0].senses, ['気づく', '観察する']); assert.equal(cards[0].origin.length, 1);
+  assert.equal(cards[1].set, 'met');
+  assert.equal(cards[2].id, 'vocation'); assert.equal(cards[2].status, 'approved'); assert.equal(cards[2].origin[0].misread, '');
+});

@@ -528,12 +528,28 @@ function finishBoss(b, sec, answers) {
 }
 
 // ---- 書き出し ----
+const EITANGO_INBOX = 'eigo:inbox';   // 中の eitango が起動時に読んでカードにする（同じ端末・同じ場所の localStorage）
+function sendInbox() {
+  const ents = L.inboxToSend(content, state);
+  if (!ents.length) return toast('送る語がない');
+  let box = [];
+  try { box = JSON.parse(localStorage.getItem(EITANGO_INBOX)) || []; } catch {}
+  const have = new Set(box.map(e => e.key));
+  const day = new Date().toISOString().slice(0, 10);
+  for (const e of ents) if (!have.has(e.key)) box.push({ key: e.key, word: e.word, tr: e.tr, sentence: e.sentence, misread: '', meaning: e.meaning, date: day, from: 'kasenbu' });
+  try { localStorage.setItem(EITANGO_INBOX, JSON.stringify(box)); }
+  catch { return toast('送れなかった（端末の空き容量）'); }
+  state.inboxSent = [...(state.inboxSent ?? []), ...ents.map(e => e.key)]; save();
+  toast(`${ents.length}語を単語カードに送った。次のパックから出る`);
+  showExport();
+}
 function showExport() {
-  const inbox = L.inboxLines(content, state);
+  const inbox = L.inboxLines(content, state), unsent = L.inboxToSend(content, state).length;
   view(`<h1>書き出し</h1>
-    <p class="muted">週報：今週の回数、正答率の低い型、多い誤読、ボスの状態、「おかしい」と押した文。<br>受け箱：解剖で間違えた文の難語（${inbox.length}語）。eitango に貼る。</p>`,
-    `<button class="btn" id="week">週報をコピー</button><button class="btn sub" id="inbox">受け箱をコピー（${inbox.length}語）</button><button class="btn sub" id="load">コンテンツを入れ替える</button>${T.apiKey() ? '<button class="btn sub" id="forget">APIキーを消す</button>' : ''}<button class="btn sub" id="home">戻る</button>`);
+    <p class="muted">週報：今週の回数、正答率の低い型、多い誤読、ボスの状態、「おかしい」と押した文。<br>受け箱：解剖で間違えた文の難語（${inbox.length}語）。「単語カードへ送る」で、まだ送っていない${unsent}語が単語カードの新しいカードになる。</p>`,
+    `<button class="btn" id="week">週報をコピー</button><button class="btn sub" id="send">受け箱を単語カードへ送る（${unsent}語）</button><button class="btn sub" id="inbox">受け箱をコピー（${inbox.length}語）</button><button class="btn sub" id="load">コンテンツを入れ替える</button>${T.apiKey() ? '<button class="btn sub" id="forget">APIキーを消す</button>' : ''}<button class="btn sub" id="home">戻る</button>`);
   document.getElementById('week').onclick = () => copy(L.weeklyText(content, state));
+  document.getElementById('send').onclick = sendInbox;
   document.getElementById('inbox').onclick = () => inbox.length ? copy(inbox.join('\n')) : toast('まだない');
   document.getElementById('load').onclick = () => showLoad();
   document.getElementById('forget')?.addEventListener('click', () => { if (confirm('この端末に保存した APIキーを消します')) { T.setKey(''); toast('キーを消した'); showExport(); } });

@@ -1169,7 +1169,7 @@ body{
     if(!os.length && c.sentence) os=[{ tr:c.tr, sentence:c.sentence }];
     var trs=(c.origin||[]).map(function(o){ return o.tr; }).filter(Boolean);
     if(!trs.length && c.tr) trs=[c.tr];
-    trs=trs.filter(function(t,i){ return trs.indexOf(t)===i; });
+    trs=trs.filter(function(t,i){ return trs.indexOf(t)===i && /^TR\d+$/.test(t); });
     var et=c.etymology||{};
     return '<h1'+(c.word.length>10 ? ' class="l"' : '')+'>'+esc(c.word)+'</h1>'
       +(trs.length ? '<p class="old trs">'+trs.map(function(t){ return '<button type="button" class="trbtn" data-tr="'+esc(t)+'">'+esc(t)+'　全文 ›</button>'; }).join('')+'</p>' : (c.set==='met' ? '<p class="old">出会った語</p>' : ''))
@@ -2028,7 +2028,7 @@ body{
   });
   $('exportBtn').addEventListener('click', function(){
     /* 会話（eigo:chats）も含める。鍵は含めない */
-    var blob=new Blob([JSON.stringify(Object.assign({}, S, { chats:loadChats(), mytr:loadMyTr() }), null, 1)], { type:'application/json' });
+    var blob=new Blob([JSON.stringify(Object.assign({}, S, { chats:loadChats(), mytr:loadMyTr(), inbox:loadInbox() }), null, 1)], { type:'application/json' });
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download='eitango-'+dayKey().replace(/-/g,'')+'.json';
     document.body.appendChild(a); a.click(); a.remove();
@@ -2050,7 +2050,8 @@ body{
       if(!confirm('いまの記録をこのファイルの内容で置き換えます')) return;
       if(s.chats && typeof s.chats==='object' && !Array.isArray(s.chats)) saveChats(s.chats);
       if(s.mytr && typeof s.mytr==='object' && !Array.isArray(s.mytr)) saveMyTr(s.mytr);
-      delete s.chats; delete s.mytr;
+      if(Array.isArray(s.inbox)) saveInbox(s.inbox);
+      delete s.chats; delete s.mytr; delete s.inbox;
       S=s; save(); renderCollection();
     });
   });
@@ -2295,6 +2296,40 @@ body{
   /* =====================================================
      起動
      ===================================================== */
+  /* =====================================================
+     下線部の受け箱（eigo:inbox）。下線部の「受け箱を単語カードへ送る」が書く。
+     起動のたびに cards.json の上に重ねる。決まりは tools/apply_words.py と同じ：
+     同じ語・同じ TR の tr カード → met に昇格／met の同じ語 → 出自を追記／初級の同じ語 → met に統合（意味を先頭に）／なければ met を新規。
+     一文・意味は送られたまま使い、作らない・直さない。この端末にだけ置く（公開しない）。書き出しに含める
+     ===================================================== */
+  var INBOX_KEY='eigo:inbox';
+  function loadInbox(){ try{ var a=JSON.parse(localStorage.getItem(INBOX_KEY)); return Array.isArray(a) ? a : []; }catch(e){ return []; } }
+  function saveInbox(a){ try{ localStorage.setItem(INBOX_KEY, JSON.stringify(a)); }catch(e){} }
+  function inboxNorm(w){ return String(w).replace(/（.*?）/g, '').trim().toLowerCase().replace(/\s+/g, ' '); }
+  function inboxId(w){ return String(w).trim().toLowerCase().replace(/\s+/g, '-'); }
+  function applyInbox(cards, ents){
+    var n=0;
+    ents.forEach(function(e){
+      if(!e || !e.word || !e.meaning) return;
+      var w=inboxNorm(e.word), id=inboxId(e.word), t=null, merged=false;
+      if(e.tr) t=cards.filter(function(c){ return c.tr===e.tr && inboxNorm(c.word)===w && (c.set==='tr' || c.set==='met'); })[0]||null;
+      if(!t) t=cards.filter(function(c){ return c.set==='met' && inboxNorm(c.word)===w; })[0]||null;
+      if(!t){ t=cards.filter(function(c){ return (c.set||'list')==='list' && (c.id===id || inboxNorm(c.word)===w); })[0]||null; merged=!!t; }
+      if(!t) t=cards.filter(function(c){ return c.id===id; })[0]||null;
+      var o={ tr:e.tr||'', sentence:e.sentence||'', misread:e.misread||'', date:e.date||'' };
+      if(t){
+        if((t.origin||[]).some(function(x){ return x.tr===o.tr && x.sentence===o.sentence; })) return;
+        t.set='met'; (t.origin=t.origin||[]).push(o);
+        if(merged && (t.senses||[]).indexOf(e.meaning)<0) t.senses=[e.meaning].concat(t.senses||[]);
+        if(!t.status) t.status='approved';
+      }else{
+        cards.push({ id:id, word:e.word, set:'met', category:'', pos:'', ipa:'', kana:'', senses:[e.meaning], senses_noun:[], origin:[o], status:'approved', local:true });
+      }
+      n++;
+    });
+    return n;
+  }
+
   S=load();
   Promise.all([
     /* カードは元の eitango（/eitango/）の公開分を読む。正本の一文を含むので、下線部のリポジトリには入れない */
@@ -2304,6 +2339,7 @@ body{
     fetch('sensei-samples.json').then(function(r){ return r.json(); }).catch(function(){ return {}; })
   ]).then(function(res){
     CARDS=res[0]; WORDS=res[1]; SAMPLES=res[2]||{};
+    applyInbox(CARDS, loadInbox());
     CARDS.forEach(function(c){ BYID[c.id]=c; });
     APPROVED=CARDS.filter(function(c){ return c.status==='approved'; });
     /* 誤読の記録がある手持ちは、あとから誤読が付いた語も含めてキラにする */
