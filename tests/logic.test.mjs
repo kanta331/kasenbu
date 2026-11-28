@@ -449,3 +449,17 @@ test('今日の戦績：今日の対戦・命中率・パラメータの動き�
   assert.equal(R.changes[0].key, 'core'); assert.equal(R.changes[0].from, 40); assert.equal(R.changes[0].to, 70);
   assert.ok(['best', 'up'].includes(R.mood));
 });
+
+test('ボスの装甲：その型の文で命中1・抜群2、上限で止まり、全部割れたら挑戦可能', () => {
+  const boss = { id: 'K2022-2-a', types: ['REL', 'INS'] };
+  const s = { types: ['REL'] };
+  let r = L.crackArmor(L.emptyState(), boss, s, 'crit');
+  assert.deepEqual(r.hit, [{ type: 'REL', n: 2 }]);
+  r = L.crackArmor(r.state, boss, s, 'miss'); assert.deepEqual(r.hit, []);
+  let st = r.state;
+  for (let i = 0; i < 5; i++) st = L.crackArmor(st, boss, { types: ['REL', 'INS'] }, 'hit').state;
+  const a = L.armorOf(st, boss);
+  assert.deepEqual(a.per.map(p => p.broken), [6, 5]); assert.equal(a.ready, false);
+  st = L.crackArmor(st, boss, { types: ['INS'] }, 'hit').state;
+  assert.equal(L.armorOf(st, boss).ready, true);
+});

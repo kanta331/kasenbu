@@ -138,10 +138,11 @@ function showHome() {
       const id = `K${y}-${q}-${p}`, b = bosses.get(id);
       if (!b) { grid += `<div class="boss sealed"><span class="lbl">(${q})${p}</span><span class="st">データなし</span></div>`; continue; }
       const st = state.bosses[id]?.status;
-      const c = ['boss', st ?? '', locked ? 'sealed' : '', next?.id === id ? 'next' : ''].join(' ');
+      const ar = L.armorOf(state, b), showAr = !locked && st !== 'defeated';
+      const c = ['boss', st ?? '', locked ? 'sealed' : '', next?.id === id ? 'next' : '', showAr && ar.ready ? 'ready' : ''].join(' ');
       grid += `<button class="${c}" data-boss="${id}"><span class="lbl">(${q})${p}</span>
         <span class="st">${locked ? '封印' : STATUS[st] ?? '未挑戦'}${next?.id === id ? '・次' : ''}</span>
-        <span class="tags">${b.types.map(x => `<span class="tag">${x}</span>`).join('')}</span></button>`;
+        <span class="tags">${b.types.map(x => `<span class="tag">${x}</span>`).join('')}</span>${showAr && ar.broken ? `<span class="armor"><i style="width:${Math.round(100 * ar.broken / ar.total)}%"></i></span>${ar.ready ? '<span class="st rdy">挑戦可能</span>' : ''}` : ''}</button>`;
     }
     grid += '</div>';
   }
@@ -330,6 +331,9 @@ function answer(a, el) {
   const lvBefore = q.picked != null ? L.skillLevel(state.skillXp?.[q.picked]).lv : 0;
   state = L.recordTurn(state, { picked: q.picked, kind: tr.kind });
   const lvAfter = q.picked != null ? L.skillLevel(state.skillXp?.[q.picked]).lv : 0;
+  const boss = L.nextBoss(content, state, today());
+  const cr = L.crackArmor(state, boss, s, tr.kind); state = cr.state;
+  const armorNote = cr.hit.length ? `<p class="armor-note">ボス ${boss.year}年度 (${boss.q})(${boss.part}) の装甲　${cr.hit.map(h => `${h.type} −${h.n}`).join('　')}${L.armorOf(state, boss).ready ? '　<b>全部割れた。挑戦可能</b>' : ''}</p>` : '';
   session.hp = Math.max(0, session.hp - tr.damage);
   if (tr.kind === 'crit') session.crit++;
   q.kind = tr.kind;
@@ -351,7 +355,7 @@ function answer(a, el) {
   const prevS = prev ? byId(prev.sent) : null;
   document.getElementById('after').innerHTML = `
     <div class="verdict${ok ? ' ok' : ''}${tr.kind === 'crit' ? ' crit' : ''}">${verdictText}</div><span class="hp big">${hpText(session.hp)}</span>
-    <div class="sensei-say"><span class="av">先</span><p>${esc(say)}</p></div>${missingNote}
+    <div class="sensei-say"><span class="av">先</span><p>${esc(say)}</p></div>${missingNote}${armorNote}
     ${!ok && yours ? `<div class="yours">あなたの選んだ読み：${yours}</div>` : ''}
     <div class="explain">
       ${prevS ? sentenceHTML(prevS, { prev: true, highlight: { refdst: range(prev.range) } }) : ''}

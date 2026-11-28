@@ -156,6 +156,15 @@ button{ font:inherit; color:inherit; }
 .s-say small{ display:block; font-size:11px; color:var(--muted); margin-bottom:2px; }
 .s-close{ position:fixed; top:calc(env(safe-area-inset-top) + 6px); right:10px; z-index:61; background:none; border:0; color:#5d6468; font-size:22px; padding:8px 12px; cursor:pointer; }
 
+/* ボスの装甲（docs/GAME.md ステップ3 簡易版） */
+.boss .armor{ display:block; height:4px; background:var(--line); border-radius:2px; overflow:hidden; margin-top:2px; }
+.boss .armor > i{ display:block; height:100%; background:var(--ink); }
+.boss.ready{ border-color:var(--ink); border-width:2.5px; animation:ready 1.6s ease-in-out infinite; }
+.boss .rdy{ color:var(--ink); font-weight:800; }
+@keyframes ready{ 50%{ box-shadow:0 0 0 4px color-mix(in srgb, var(--ink) 15%, transparent); } }
+.armor-note{ font-size:13px; margin:6px 2px; } .armor-note b{ font-weight:800; }
+@media (prefers-reduced-motion:reduce){ .boss.ready{ animation:none; } }
+
 /* 対戦（docs/GAME.md ステップ2） */
 .hp{ font-variant-numeric:tabular-nums; letter-spacing:.05em; color:var(--ink); }
 .hp.big{ display:inline-block; margin-left:10px; font-size:15px; }

@@ -543,3 +543,24 @@ export function todayReport(content, state, now = Date.now()) {
       : turns && hits / turns >= 0.8 ? 'good' : turns && hits / turns < 0.5 ? 'weak' : 'flat',
   };
 }
+
+// ---- ボスの装甲（docs/GAME.md ステップ3。簡易版：装甲と割れ具合だけ） ----
+// 次のボスの型ごとに ARMOR 点の装甲。その型を持つ文で命中すると1、抜群なら2割れる。全部割れたら「挑戦可能」
+export const ARMOR = 6;
+export function armorOf(state, boss) {
+  const a = state.armor?.[boss.id] ?? {};
+  const per = boss.types.map(t => ({ type: t, broken: Math.min(ARMOR, a[t] ?? 0) }));
+  const broken = per.reduce((x, p) => x + p.broken, 0), total = boss.types.length * ARMOR;
+  return { per, broken, total, ready: total > 0 && broken >= total };
+}
+/** 1ターンの命中で次のボスの装甲を割る。返り値 { state, hit: [{type, n}] } */
+export function crackArmor(state, boss, s, kind) {
+  if (!boss || kind === 'miss') return { state, hit: [] };
+  const n = kind === 'crit' ? 2 : 1, st = structuredClone(state), hit = [];
+  const a = ((st.armor ??= {})[boss.id] ??= {});
+  for (const t of boss.types) {
+    if (!(s.types ?? []).includes(t) || (a[t] ?? 0) >= ARMOR) continue;
+    const before = a[t] ?? 0; a[t] = Math.min(ARMOR, before + n); hit.push({ type: t, n: a[t] - before });
+  }
+  return { state: st, hit };
+}
