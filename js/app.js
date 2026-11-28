@@ -148,6 +148,7 @@ function showHome() {
       <div class="stat"><b>${Math.max(0, L.daysUntilExam(t))}</b><span>試験まであと（日）</span></div>
       <div class="stat"><b>${L.defeatedCount(state)}<small style="font-size:16px">/20</small></b><span>骨格を取り切れた下線部（合格ライン（推定）${L.PASS_LINE}）</span></div>
     </div>
+    ${statusHTML(L.statsFor(content, state))}
     ${grid}`,
     `${lessonNote()}<button class="btn" id="go">対戦</button>`);
   document.getElementById('go').onclick = startSession;
@@ -238,7 +239,7 @@ function runSession(focus = []) {
   const qs = (!focus.length && titleQs) || L.selectSession(content, state, today(), Date.now(), { focus });
   titleQs = null;
   if (!qs.length) return toast('出せる文がない');
-  session = { qs, k: 0, results: [] };
+  session = { qs, k: 0, results: [], statsBefore: L.statsFor(content, state) };
   showQuestion();
 }
 function showQuestion() {
@@ -426,6 +427,38 @@ function bindSensei(box, s, info) {
   };
 }
 
+// ---- ステータス（docs/GAME.md 3.5） ----
+function radarSVG(stats) {
+  const C = 120, R = 78, n = L.STATS.length;
+  const pt = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n; return [C + Math.cos(a) * R * v / 100, C + Math.sin(a) * R * v / 100]; };
+  const poly = vs => vs.map((v, i) => pt(i, v).map(x => x.toFixed(1)).join(',')).join(' ');
+  const rings = [25, 50, 75, 100].map(v => `<polygon points="${poly(L.STATS.map(() => v))}" class="r-grid"/>`).join('');
+  const axes = L.STATS.map((_, i) => { const [x, y] = pt(i, 100); return `<line x1="${C}" y1="${C}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="r-grid"/>`; }).join('');
+  const line = `<polygon points="${poly(L.STATS.map(() => L.STAT_LINE))}" class="r-line"/>`;
+  const vals = L.STATS.map(st => stats[st.key].value ?? 0);
+  const me = `<polygon points="${poly(vals)}" class="r-me"/>`;
+  const labels = L.STATS.map((st, i) => {
+    const [x, y] = pt(i, 128), v = stats[st.key].value;
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="r-lbl" style="fill:var(--${st.color})">${st.name}</text>
+      <text x="${x.toFixed(1)}" y="${(y + 15).toFixed(1)}" class="r-val">${v == null ? '計測中' : v}</text>`;
+  }).join('');
+  return `<svg viewBox="-20 -6 280 262" class="radar" role="img" aria-label="ステータス">${rings}${axes}${line}${me}${labels}</svg>`;
+}
+function statusHTML(stats) {
+  const rusty = L.STATS.filter(st => stats[st.key].rust > 0 && stats[st.key].value != null);
+  return `<div class="status"><div class="status-h">ステータス<span class="muted">点線＝合格ライン（推定）の目安 ${L.STAT_LINE}</span></div>
+    ${radarSVG(stats)}
+    ${rusty.length ? `<p class="rust">${rusty.map(st => `${st.name}がさびている（−${stats[st.key].rust}）`).join('　')}。対戦で取り戻せる。</p>` : ''}</div>`;
+}
+function changesHTML(changes) {
+  if (!changes.length) return '';
+  return `<ul class="changes">${changes.map((c, i) => {
+    const cls = c.diff == null ? 'new' : c.diff > 0 ? 'up' : c.diff < 0 ? 'down' : 'same';
+    const d = c.diff == null ? '計測開始' : c.diff > 0 ? `▲ +${c.diff}` : c.diff < 0 ? `▼ ${c.diff}` : '±0';
+    return `<li class="${cls}" style="animation-delay:${0.15 + i * 0.12}s"><span class="c-name">${c.name}</span><span class="c-val">${c.from == null ? '' : `${c.from} → `}<b>${c.to}</b></span><span class="c-diff">${d}</span>${c.newBest && c.diff !== null ? '<span class="c-best">自己ベスト</span>' : ''}</li>`;
+  }).join('')}</ul>`;
+}
+
 // ---- 読み上げ（押したときだけ。骨格の切れ目で区切る） ----
 const speakBtn = () => Voice.canSpeak() ? '<button class="link speak" id="speak" type="button">▶ 読む</button>' : '';
 function bindSpeak(s) {
@@ -463,8 +496,12 @@ const range = r => Array.from({ length: r[1] - r[0] + 1 }, (_, i) => r[0] + i);
 function showSummary() {
   const r = session.results;
   const hits = r.filter(x => x.ok).length;
+  const after = L.statsFor(content, state), changes = session.statsBefore ? L.statChanges(session.statsBefore, after) : [];
+  state = L.recordBest(state, after); save();
   sfx.win(hits);
-  view(`<h1>対戦終了</h1><p class="score">命中 <b>${hits}</b> / ${r.length}</p>
+  if (changes.some(c => c.diff > 0 || c.newBest)) setTimeout(sfx.up, 450);
+  if (changes.some(c => c.diff < 0)) setTimeout(sfx.down, 900);
+  view(`<h1>対戦終了</h1><p class="score">命中 <b>${hits}</b> / ${r.length}</p>${changesHTML(changes)}
     <ul class="plain">${r.map((x, i) => `<li>${x.ok ? '○' : '×'}　形式${x.fmt}　<span class="muted">${x.sid}</span>${!x.ok && x.info && canAsk(byId(x.sid)) ? `　<button class="link ask" data-ask="${i}">Claude先生に聞く</button>` : ''}</li>`).join('')}</ul>`,
     `<button class="btn" id="again">もう一度対戦</button><button class="btn sub" id="home">ホーム</button>`);
   document.getElementById('again').onclick = startSession;

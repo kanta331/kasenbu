@@ -403,3 +403,53 @@ export function titleSentence(content, state, today) {
   }
   return null;
 }
+
+// ---- ステータス（docs/GAME.md 3.5）：6つのパラメータ。最近の命中率で上下し、休むとさびる ----
+const hasType = (s, ts) => (s.types ?? []).some(t => ts.includes(t));
+export const STATS = [
+  { key: 'core', name: '芯', color: 'subj', test: (s, f) => f === 'A' || f === 'B' },
+  { key: 'bracket', name: '括弧', color: 'clause', test: (s, f) => f === 'C' || (f === 'F' && hasType(s, ['REL', 'NOUNCL', 'PTC'])) },
+  { key: 'ins', name: '割り込み', color: 'clause', test: s => hasType(s, ['INS']) },
+  { key: 'ref', name: '指す先', color: 'ref', test: (s, f) => f === 'D' || (f === 'F' && hasType(s, ['REF', 'IT'])) },
+  { key: 'logic', name: '向き', color: 'logic', test: (s, f) => f === 'E' || (f === 'F' && hasType(s, ['CONJ'])) },
+  { key: 'unknown', name: '未知語', color: 'verb', test: (s, f) => f === 'F' },
+];
+export const STAT_WINDOW = 20, STAT_MIN = 5, STAT_LINE = 80;
+/** さび：最後の回答から2日目以降、1日ごとに −2（最大 −20） */
+export const rustFor = days => days >= 2 ? Math.min(20, (days - 1) * 2) : 0;
+/** パラメータの値。{ key: { value（0〜100、計測中は null）, n, rust, best } } */
+export function statsFor(content, state, now = Date.now()) {
+  const byId = new Map(content.sentences.map(s => [s.id, s]));
+  const today = dayNumber(new Date(now)), out = {};
+  for (const st of STATS) {
+    const hits = [];
+    let last = null;
+    for (let i = state.log.length - 1; i >= 0 && hits.length < STAT_WINDOW; i--) {
+      const l = state.log[i], s = byId.get(l.sid);
+      if (!s || !st.test(s, l.fmt)) continue;
+      hits.push(l.ok ? 1 : 0);
+      if (last == null && l.t) last = l.t;
+    }
+    const n = hits.length;
+    const rust = last == null ? 0 : rustFor(today - dayNumber(new Date(last)));
+    const value = n < STAT_MIN ? null : Math.max(0, Math.round(100 * hits.reduce((a, b) => a + b, 0) / n) - rust);
+    out[st.key] = { value, n, rust, best: state.statBest?.[st.key] ?? null };
+  }
+  return out;
+}
+/** 対戦の前後で動いたパラメータ。自己ベストも返す */
+export function statChanges(before, after) {
+  return STATS.map(st => {
+    const a = before[st.key]?.value, b = after[st.key]?.value;
+    if (b == null) return null;
+    const best = after[st.key].best;
+    const ref = best ?? a;   // 自己ベストは、記録がまだなければ対戦前の値と比べる
+    return { key: st.key, name: st.name, from: a, to: b, diff: a == null ? null : b - a, newBest: ref != null && b > ref };
+  }).filter(x => x && (x.diff == null || x.diff !== 0 || x.newBest));
+}
+export function recordBest(state, stats) {
+  const st = structuredClone(state);
+  st.statBest ??= {};
+  for (const k of Object.keys(stats)) { const v = stats[k].value; if (v != null && (st.statBest[k] == null || v > st.statBest[k])) st.statBest[k] = v; }
+  return st;
+}

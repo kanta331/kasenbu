@@ -364,3 +364,38 @@ test('技：15枚すべてに名前がある', () => {
   assert.ok(LESSONS.every(l => typeof l.skill === 'string' && l.skill.length));
   assert.equal(new Set(LESSONS.map(l => l.skill)).size, 15);
 });
+
+// ---- ステータス ----
+test('ステータス：直近の命中率で上下し、5回未満は計測中、休むとさびて回答で戻る', () => {
+  const s = { ...full('S001-1'), types: [] };
+  const c = content([s]);
+  const day = d => new Date(`2026-12-${String(d).padStart(2, '0')}T08:00:00`).getTime();
+  let st = L.emptyState();
+  for (let i = 0; i < 4; i++) st.log.push({ t: day(1), sid: 'S001-1', fmt: 'A', ok: true });
+  assert.equal(L.statsFor(c, st, day(1)).core.value, null);            // 計測中
+  st.log.push({ t: day(1), sid: 'S001-1', fmt: 'A', ok: false });
+  assert.equal(L.statsFor(c, st, day(1)).core.value, 80);              // 4/5
+  assert.equal(L.statsFor(c, st, day(2)).core.value, 80);              // 翌日はさびない
+  assert.equal(L.statsFor(c, st, day(4)).core.rust, 4);                // 3日後 −4
+  assert.equal(L.statsFor(c, st, day(4)).core.value, 76);
+  assert.equal(L.rustFor(30), 20);                                     // 上限
+  st.log.push({ t: day(4), sid: 'S001-1', fmt: 'A', ok: true });
+  assert.equal(L.statsFor(c, st, day(4)).core.rust, 0);                // 回答で消える
+  assert.equal(L.statsFor(c, st, day(4)).unknown.value, null);
+});
+
+test('ステータス：変化と自己ベスト', () => {
+  const before = { core: { value: 60, best: 70 }, logic: { value: 80, best: 80 } };
+  const after = { core: { value: 75, best: 70 }, logic: { value: 72, best: 80 }, ref: { value: null } };
+  const ch = L.statChanges(before, after);
+  assert.deepEqual(ch.map(x => [x.key, x.diff, x.newBest]), [['core', 15, true], ['logic', -8, false]]);
+  const st = L.recordBest(L.emptyState(), { core: { value: 75 }, ref: { value: null } });
+  assert.deepEqual(st.statBest, { core: 75 });
+});
+
+test('ステータス：下がったときは自己ベストにしない（記録がまだなくても）', () => {
+  const ch = L.statChanges({ core: { value: 29, best: null } }, { core: { value: 22, best: null } });
+  assert.deepEqual(ch.map(x => [x.diff, x.newBest]), [[-7, false]]);
+  const up = L.statChanges({ core: { value: 29, best: null } }, { core: { value: 35, best: null } });
+  assert.equal(up[0].newBest, true);
+});

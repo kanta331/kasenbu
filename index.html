@@ -132,6 +132,30 @@ button{ font:inherit; color:inherit; }
 .link.ask{ padding:0 2px; }
 #app:has(.dock .btn + .btn){ padding-bottom:calc(env(safe-area-inset-bottom) + 170px); }
 
+/* ステータス（docs/GAME.md 3.5）。線だけ。色はパラメータ名の意味の色だけ */
+.status{ background:var(--face); border:1px solid var(--line); border-radius:16px; padding:12px 12px 8px; margin:12px 0 6px; }
+.status-h{ font-size:14px; font-weight:700; display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.status-h .muted{ font-size:11px; font-weight:400; }
+.radar{ display:block; width:100%; max-width:320px; margin:0 auto; }
+.r-grid{ fill:none; stroke:var(--line); stroke-width:1; }
+.r-line{ fill:none; stroke:var(--muted); stroke-width:1.2; stroke-dasharray:4 4; }
+.r-me{ fill:color-mix(in srgb, var(--ink) 10%, transparent); stroke:var(--ink); stroke-width:2; stroke-linejoin:round; }
+.r-lbl{ font-size:13px; font-weight:700; text-anchor:middle; dominant-baseline:middle; font-family:var(--sans); }
+.r-val{ font-size:12px; text-anchor:middle; dominant-baseline:middle; fill:var(--muted); font-family:var(--sans); font-variant-numeric:tabular-nums; }
+.rust{ font-size:12px; color:var(--muted); margin:2px 4px 4px; line-height:1.6; }
+.changes{ list-style:none; padding:0; margin:6px 0 16px; border:1px solid var(--line); border-radius:14px; background:var(--face); }
+.changes li{ display:grid; grid-template-columns:4.5em 1fr auto; align-items:center; gap:4px 8px; padding:10px 14px; border-top:1px solid var(--line); animation:cin .35s ease-out both; }
+.changes li:first-child{ border-top:0; }
+.c-name{ font-weight:700; }
+.c-val{ font-variant-numeric:tabular-nums; } .c-val b{ font-size:20px; }
+.c-diff{ font-weight:800; font-variant-numeric:tabular-nums; }
+.changes .down .c-diff, .changes .down .c-val b{ color:var(--muted); }
+.changes .down{ animation-name:cdown; }
+.c-best{ grid-column:1 / -1; font-size:12px; font-weight:800; letter-spacing:.1em; }
+@keyframes cin{ from{ opacity:0; transform:translateY(8px); } }
+@keyframes cdown{ 0%{ opacity:0; transform:translateY(-6px); } 60%{ transform:translateY(3px); } 100%{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion:reduce){ .changes li{ animation:none; } }
+
 /* タイトル（docs/GAME.md ステップ1）：暗い地に、英文1行・下線・ロゴ・残り日数。色は文字色と下線の1色だけ */
 .title-screen{ position:fixed; inset:0; z-index:50; background:#0f1214; color:#e9e3d4; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; text-align:center; transition:opacity .25s; }
 .title-screen.out{ opacity:0; pointer-events:none; }
