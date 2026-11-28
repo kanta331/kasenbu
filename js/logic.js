@@ -363,3 +363,43 @@ export function lessonStatus(state, idx) {
   if (idx >= (L.next ?? 0)) return null;
   return (L.skipped ?? []).includes(idx) ? 'skipped' : 'done';
 }
+
+// ---- 入口（docs/GAME.md ステップ1） ----
+/** 読み上げの区切り。主節の主語の終わり、節・挿入の始まりと終わりで切る。返り値は文字列の配列 */
+export function speechChunks(s) {
+  const n = s.tokens.length, cut = new Set();
+  if (s.main?.s) cut.add(s.main.s[1] + 1);
+  for (const sp of s.spans ?? []) { cut.add(sp.range[0]); cut.add(sp.range[1] + 1); }
+  const out = [];
+  let a = 0;
+  for (let i = 1; i <= n; i++) {
+    if (i === n || cut.has(i)) {
+      const t = joinTokens(s, a, i - 1).trim();
+      if (/[A-Za-z0-9]/.test(t)) out.push(t);
+      else if (out.length && t) out[out.length - 1] += t;   // 句読点だけのかたまりは前に付ける
+      a = i;
+    }
+  }
+  return out;
+}
+/** 中の eitango にパックが開けられる状態か（開封途中を含む）。eitango の charge() と同じ計算。満タン＝6時間 */
+export const EITANGO_FULL = 6 * 3600e3;
+export function packReady(eit, now = Date.now()) {
+  if (!eit || eit.v !== 1 || typeof eit.charge !== 'number') return false;
+  if (eit.pending && Array.isArray(eit.pending.cards) && eit.pending.cards.length) return true;
+  let c = eit.charge;
+  if (c < EITANGO_FULL) c = Math.min(EITANGO_FULL, c + Math.max(0, now - (eit.chargeAt ?? now)));
+  return c >= EITANGO_FULL;
+}
+/** タイトルに出す文：前日までに外した文のうち新しいもの（出せる文に限る）。なければ null */
+export function titleSentence(content, state, today) {
+  const pool = new Map(eligibleSentences(content, state).map(s => [s.id, s]));
+  const d = dayNumber(today);
+  for (let i = state.log.length - 1; i >= 0; i--) {
+    const l = state.log[i];
+    if (l.ok || !pool.has(l.sid)) continue;
+    if (l.t && dayNumber(new Date(l.t)) >= d) continue;   // 今日外した文は出さない（前日まで）
+    return pool.get(l.sid);
+  }
+  return null;
+}

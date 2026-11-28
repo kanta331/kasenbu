@@ -1,4 +1,5 @@
-/* 基礎講座（15回）。1日1回、今日の5問の前に自動で入る。
+/* 技（15枚）。docs/GAME.md。「対戦」を押すたびに、まだ覚えていない技を1つ「技を覚える」で先に見せる。
+   skill が技の名前、title はその中身の見出し。
    例文（ex）は形を見せるためだけの短い作例で、出題・採点には使わない。
    本物の文は content から EXAMPLE_RULES[real] で選ぶ（英文をコードに持たない）。
 
@@ -9,6 +10,7 @@
 */
 export const LESSONS = [
   {
+    skill: '芯を取る',
     title: '文の芯：「だれが」＋「どうする」',
     goal: '英語の文には必ず芯がある。まずそれを見つける。',
     focus: [], real: 'short',
@@ -20,6 +22,7 @@ export const LESSONS = [
     realSay: '作例と同じく、最初は緑と赤だけを見る。',
   },
   {
+    skill: '動詞を見分ける',
     title: '赤になれる語、なれない語',
     goal: '動詞の形の目印を覚える。',
     focus: ['VPRED'], real: 'verbs',
@@ -32,6 +35,7 @@ export const LESSONS = [
     realSay: '赤が2語以上になっている文。どの語が赤に入るかを見る。',
   },
   {
+    skill: '飾りを薄くする',
     title: '前置詞のかたまりは飾り',
     goal: 'in / of / on で始まるかたまりを薄くして読む。',
     focus: [], real: 'longsubj',
@@ -43,6 +47,7 @@ export const LESSONS = [
     realSay: '緑の下線が長い文。下線の中の飾りを薄く読む。',
   },
   {
+    skill: '先に述語を探す',
     title: '主語はどこまで？　先に赤を探す',
     goal: '長い主語の終わりを自分で決める。',
     focus: [], real: 'longsubj',
@@ -50,9 +55,10 @@ export const LESSONS = [
       { say: '主語の終わりは書いていない。コツは、先に芯の赤を探し、その手前までを主語にすること。', ex: '[s The way [m to the station ] ] [v is ] easy .', ja: '駅への道はわかりやすい。' },
       { say: '赤は can make。その手前の A small change in our daily life 全体が主語。', ex: '[s A small change [m in our daily life ] ] [v can make ] a big difference .', ja: '日常生活の小さな変化が、大きな違いを生みうる。' },
     ],
-    realSay: '練習の問題A（主語はどこまで）とB（述語動詞はどれ）は、この手順で解く。',
+    realSay: '対戦の「主語はどこまで」「述語動詞はどれ」のターンは、この手順で取る。',
   },
   {
+    skill: '（ ）を閉じる',
     title: '後ろから説明する節：which / that / who',
     goal: '名詞の後ろの（ ）を開いて、閉じる。',
     focus: ['REL'], real: 'relword',
@@ -64,6 +70,7 @@ export const LESSONS = [
     realSay: '（ ）がどこで開いてどこで閉じるか、赤がどこにあるかを見る。',
   },
   {
+    skill: '消えた which を補う',
     title: 'which が消える形',
     goal: '見えない which に気づく。',
     focus: ['REL'], real: 'contact',
@@ -75,6 +82,7 @@ export const LESSONS = [
     realSay: 'which のない（ ）がある本物の文。（ ）の始まりを確かめる。',
   },
   {
+    skill: '前置詞＋which をほどく',
     title: '前置詞＋which',
     goal: 'in which の（ ）の中で、だれが何をするかを取り違えない。',
     focus: ['REL'], real: 'prepwh',
@@ -85,6 +93,7 @@ export const LESSONS = [
     realSay: '前置詞＋which の文。（ ）の中の主語を確かめる。',
   },
   {
+    skill: '-ing／-ed を（ ）に入れる',
     title: '-ing / -ed が後ろから説明する',
     goal: '名詞の後ろの -ing / -ed を（ ）に入れる。',
     focus: ['PTC', 'VPRED'], real: 'postptc',
@@ -96,6 +105,7 @@ export const LESSONS = [
     realSay: '名詞の後ろの -ing / -ed を（ ）に入れて、本当の赤を探す。',
   },
   {
+    skill: '割り込みを飛ばす',
     title: '割り込み：カンマではさまれた部分',
     goal: '割り込みを [ ] でくくって、いったん飛ばす。',
     focus: ['INS'], real: 'ins',
@@ -107,6 +117,7 @@ export const LESSONS = [
     realSay: '[ ] を飛ばして、緑と赤をつなげて読む。',
   },
   {
+    skill: '名詞のかたまりにする',
     title: '名詞のかたまり：that / what / how',
     goal: '（ ）全体を1つの名詞として扱う。',
     focus: ['NOUNCL'], real: 'nouncl',
@@ -118,6 +129,7 @@ export const LESSONS = [
     realSay: '名詞の（ ）を見つけて、文の中で主語・目的語のどちらになっているかを見る。',
   },
   {
+    skill: '指す先を決める',
     title: 'it / they は何を指す？',
     goal: '指す先を決めてから訳す。',
     focus: ['REF', 'IT'], real: 'ref',
@@ -129,6 +141,7 @@ export const LESSONS = [
     realSay: '紫の語が指す先を確かめる。',
   },
   {
+    skill: '向きを読む',
     title: '論理語：話の向きを決める語',
     goal: '順接・逆接・譲歩・理由・同時を見分ける。',
     focus: ['CONJ'], real: 'conn',
@@ -141,6 +154,7 @@ export const LESSONS = [
     realSay: '金色の語の向きを確かめる。',
   },
   {
+    skill: '文頭・文末の -ing を切る',
     title: '文頭・文末の -ing / -ed',
     goal: 'カンマまでを（ ）にして、芯を後ろに探す。',
     focus: ['PTC'], real: 'leadptc',
@@ -152,6 +166,7 @@ export const LESSONS = [
     realSay: '-ing / -ed の（ ）と、芯の主語の関係を見る。',
   },
   {
+    skill: '組を探す',
     title: 'so … that と not A but B',
     goal: '2つで1組の形に気づく。',
     focus: ['SOTHAT', 'NEGCMP'], real: 'negcmp',
@@ -163,6 +178,7 @@ export const LESSONS = [
     realSay: '2つで1組の語を見つける。',
   },
   {
+    skill: '〔？〕のまま進む',
     title: 'まとめ：長い文をほどく手順',
     goal: 'ここまでの手順を1つの文に使う。',
     focus: ['REL', 'INS'], real: 'long',
@@ -170,7 +186,7 @@ export const LESSONS = [
       { say: '①芯の赤を探す　②その手前を主語にする　③（ ）と [ ] でくくって飛ばす　④論理語の向きを確かめる　⑤it などの指す先を決める。', ex: '[s The book ( which my teacher recommended ) ] , { though difficult } , [v changed ] the way ( I read ) .', ja: '先生が勧めてくれた本は、難しかったが、私の読み方を変えた。' },
       { say: '知らない語は〔？〕のまま進む。骨格が取れれば、〔？〕があっても文の形はわかる（E3）。', ex: '[s The 〔？〕 ( which he found ) ] [v was ] very old .', ja: '彼が見つけた〔？〕はとても古かった。' },
     ],
-    realSay: '本物の長い文に①〜⑤を使う。これで講座は終わり。以後は今日の5問だけになる。',
+    realSay: '本物の長い文に①〜⑤を使う。これで15の技がそろった。以後は対戦だけになる。',
   },
 ];
 

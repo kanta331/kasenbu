@@ -331,3 +331,36 @@ test('受け箱：発音・カタカナ・例文を付けて送り、中の eita
   assert.deepEqual(cards[0].examples, [{ en: 'keep' }]);
   assert.deepEqual([cards[1].ipa, cards[1].kana, cards[1].examples], ['/n/', 'ナヴル', ex]);
 });
+
+// ---- 入口（docs/GAME.md ステップ1） ----
+test('読み上げ：主語の終わりと節の始まり・終わりで区切り、句読点は前に付ける', () => {
+  const s = { id: 'X', tokens: ['The', 'book', 'which', 'I', 'bought', 'is', 'old', '.'], space_before: [true, true, true, true, true, true, true, false],
+    main: { s: [0, 4], v: [5, 5] }, spans: [{ range: [2, 4], kind: 'REL', head: 1 }] };
+  assert.deepEqual(L.speechChunks(s), ['The book', 'which I bought', 'is old.']);
+});
+
+test('パック：開封途中か、ゲージ（6時間）が満タンなら開ける', () => {
+  const now = 1e12, H = 3600e3;
+  assert.equal(L.packReady(null, now), false);
+  assert.equal(L.packReady({ v: 1, charge: 6 * H, chargeAt: now }, now), true);
+  assert.equal(L.packReady({ v: 1, charge: 2 * H, chargeAt: now - 3 * H }, now), false);
+  assert.equal(L.packReady({ v: 1, charge: 2 * H, chargeAt: now - 4 * H }, now), true);
+  assert.equal(L.packReady({ v: 1, charge: 0, chargeAt: now, pending: { cards: [{ id: 'a' }] } }, now), true);
+});
+
+test('タイトルの文：前日までに外した文の新しいもの。今日外した文・出せない文は出さない', () => {
+  const a = full('S001-1'), b = full('S002-1'), c = { ...full('K2025-1-a-1'), source: { kind: 'kakomon', year: 2025, q: 1, part: 'a' } };
+  const st = L.emptyState();
+  st.log = [
+    { t: new Date('2026-11-30T08:00:00').getTime(), sid: 'S001-1', ok: false },
+    { t: new Date('2026-11-30T09:00:00').getTime(), sid: 'K2025-1-a-1', ok: false },   // 封印中（出せない）
+    { t: new Date('2026-12-01T07:00:00').getTime(), sid: 'S002-1', ok: false },        // 今日
+  ];
+  assert.equal(L.titleSentence(content([a, b, c]), st, TODAY).id, 'S001-1');
+  assert.equal(L.titleSentence(content([a, b, c]), L.emptyState(), TODAY), null);
+});
+
+test('技：15枚すべてに名前がある', () => {
+  assert.ok(LESSONS.every(l => typeof l.skill === 'string' && l.skill.length));
+  assert.equal(new Set(LESSONS.map(l => l.skill)).size, 15);
+});

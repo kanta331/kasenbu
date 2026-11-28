@@ -1873,7 +1873,13 @@ body{
     document.querySelector('#result .h2').textContent='今回の'+P.cards.length+'枚';
     show('result');
   }
-  $('resultHome').addEventListener('click', function(){ show('home'); });
+  /* 下線部のタイトルから来たとき（?then=battle）は、開封が終わったら下線部の対戦へ戻る（docs/GAME.md ステップ1） */
+  var THEN_BATTLE=/[?&]then=battle\b/.test(location.search);
+  if(THEN_BATTLE){
+    $('resultHome').textContent='対戦へ';
+    var tk=document.querySelector('.to-kasenbu'); if(tk){ tk.href='../#battle'; tk.textContent='← 開けずに対戦へ'; }
+  }
+  $('resultHome').addEventListener('click', function(){ if(THEN_BATTLE){ location.href='../#battle'; return; } show('home'); });
 
   /* =====================================================
      3. カード／4. コレクション

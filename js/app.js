@@ -3,6 +3,8 @@ import * as L from './logic.js';
 import * as DB from './db.js';
 import { LESSONS, exampleHTML } from './lessons.js';
 import * as T from './sensei.js';
+import { sfx, muted, setMuted } from './sfx.js';
+import * as Voice from './speech.js';
 
 const $app = document.getElementById('app');
 const KIND_OPEN = { INS: '[', default: '(' }, KIND_CLOSE = { INS: ']', default: ')' };
@@ -38,6 +40,7 @@ async function copy(text, msg = 'コピーした') {
 }
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function view(html, dock = '') {
+  Voice.stop();
   $app.innerHTML = html + (dock ? `<div class="dock"><div>${dock}</div></div>` : '');
   window.scrollTo(0, 0);
 }
@@ -140,43 +143,43 @@ function showHome() {
     }
     grid += '</div>';
   }
-  view(`<div class="top"><h1>下線部</h1><span><a class="link" href="eitango/">単語カード</a><button class="link" id="lessons">講座</button><button class="link" id="export">書き出し</button></span></div>
+  view(`<div class="top"><h1>下線部</h1><span><a class="link" href="eitango/">単語カード</a><button class="link" id="lessons">技</button><button class="link" id="export">書き出し</button></span></div>
     <div class="stats">
       <div class="stat"><b>${Math.max(0, L.daysUntilExam(t))}</b><span>試験まであと（日）</span></div>
       <div class="stat"><b>${L.defeatedCount(state)}<small style="font-size:16px">/20</small></b><span>骨格を取り切れた下線部（合格ライン（推定）${L.PASS_LINE}）</span></div>
     </div>
     ${grid}`,
-    `${lessonNote()}<button class="btn" id="go">今日の5問</button>`);
+    `${lessonNote()}<button class="btn" id="go">対戦</button>`);
   document.getElementById('go').onclick = startSession;
   document.getElementById('export').onclick = showExport;
   document.getElementById('lessons').onclick = showLessonList;
   $app.querySelectorAll('[data-boss]').forEach(el => el.onclick = () => showBossIntro(bosses.get(el.dataset.boss)));
 }
 
-// ---- 基礎講座（1日1回、今日の5問の前に入る） ----
+// ---- 技を覚える（docs/GAME.md。「対戦」を押すたびに、まだの技を1つ先に見せる） ----
 function lessonNote() {
   const li = L.lessonDue(state, today(), LESSONS.length);
-  return li == null ? '' : `<p class="lnote">基礎講座 第${li + 1}回（2〜3分）から始まる</p>`;
+  return li == null ? '' : `<p class="lnote">技「${esc(LESSONS[li].skill)}」を覚えてから対戦（2〜3分）</p>`;
 }
 /** 講座の一覧。終えた回・とばした回を開いて見直せる（見直しは5問につながない）。 */
-const LSTATUS = { done: '終えた', skipped: 'とばした' };
+const LSTATUS = { done: '習得', skipped: '習得（知っていた）' };
 function showLessonList() {
   const rows = LESSONS.map((les, i) => {
     const st = L.lessonStatus(state, i);
     return st
-      ? `<button class="lrow" data-li="${i}"><span class="lno">${i + 1}</span><span class="lname">${esc(les.title)}</span><span class="lst ${st}">${LSTATUS[st]}</span></button>`
-      : `<div class="lrow off"><span class="lno">${i + 1}</span><span class="lname">${esc(les.title)}</span><span class="lst">まだ</span></div>`;
+      ? `<button class="lrow" data-li="${i}"><span class="lno">${i + 1}</span><span class="lname">${esc(les.skill)}<small>${esc(les.title)}</small></span><span class="lst ${st}">${LSTATUS[st]}</span></button>`
+      : `<div class="lrow off"><span class="lno">${i + 1}</span><span class="lname">${esc(les.skill)}<small>${esc(les.title)}</small></span><span class="lst">未習得</span></div>`;
   }).join('');
-  view(`<div class="top"><h1>基礎講座</h1><button class="link" id="back">ホーム</button></div>
-    <p class="muted">終えた回・とばした回を見直せる。まだの回は「今日の5問」で順に出る。</p>
+  view(`<div class="top"><h1>技</h1><button class="link" id="back">ホーム</button></div>
+    <p class="muted">覚えた技は、押すともう一度見られる。まだの技は「対戦」で順に覚える。</p>
     <div class="llist">${rows}</div>`);
   document.getElementById('back').onclick = showHome;
   $app.querySelectorAll('[data-li]').forEach(el => el.onclick = () => showLesson(+el.dataset.li, 0, false, true));
 }
 function showLesson(li, k, shown = false, review = false) {
   const les = LESSONS[li], n = les.cards.length;
-  const head = `<div class="qhead"><span>基礎講座 ${li + 1} / ${LESSONS.length}${review ? '　見直し' : ''}</span><button class="link" id="quit" style="padding:0">${review ? '一覧へ' : 'やめる'}</button></div>
-    <h1 class="ltitle">${esc(les.title)}</h1>${k === 0 ? `<p class="lgoal">${esc(les.goal)}</p>` : ''}`;
+  const head = `<div class="qhead"><span>技を覚える ${li + 1} / ${LESSONS.length}${review ? '　もう一度見る' : ''}</span><button class="link" id="quit" style="padding:0">${review ? '一覧へ' : 'やめる'}</button></div>
+    <h1 class="ltitle">技：${esc(les.skill)}</h1><p class="lgoal">${esc(les.title)}${k === 0 ? `<br>${esc(les.goal)}` : ''}</p>`;
   let body, nextLabel, exId = null;
   if (k < n) {
     const c = les.cards[k];
@@ -189,13 +192,15 @@ function showLesson(li, k, shown = false, review = false) {
     if (!ex) return review ? endReview(li, null) : finishLesson(li, null);
     exId = ex.id;
     body = `<p class="lsay">本物の文（正本${ex.source.no}番）。${esc(les.realSay)}</p>
-      ${shown ? sentenceHTML(ex, { mark: 'all' }) + legend + `<dl class="kv"><dt>骨格訳</dt><dd>${esc(ex.skeleton_ja)}</dd><dt>模範訳</dt><dd>${esc(ex.model_ja)}</dd></dl>` : sentenceHTML(ex, {})}`;
-    nextLabel = shown ? (review ? '一覧へ戻る' : les.focus.length ? 'この形を含む5問へ' : '今日の5問へ') : '形を見る';
+      ${shown ? sentenceHTML(ex, { mark: 'all' }) + legend + speakBtn() + `<dl class="kv"><dt>骨格訳</dt><dd>${esc(ex.skeleton_ja)}</dd><dt>模範訳</dt><dd>${esc(ex.model_ja)}</dd></dl>` : sentenceHTML(ex, {})}`;
+    nextLabel = shown ? (review ? '一覧へ戻る' : les.focus.length ? 'この技で対戦へ' : '対戦へ') : '形を見る';
   }
-  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button>${review ? '' : '<button class="btn sub" id="lskip">この回はとばして5問へ</button>'}`);
+  view(head + body, `<button class="btn" id="lnext">${nextLabel}</button>${review ? '' : '<button class="btn sub" id="lskip">もう知っている（技だけ受け取る）</button>'}`);
   document.getElementById('quit').onclick = review ? showLessonList : showHome;
+  if (exId) bindSpeak(byId(exId));
   document.getElementById('lskip')?.addEventListener('click', () => {
     state = L.recordLesson(state, li, today(), null, { skipped: true }); save();
+    sfx.learn(); toast(`技「${les.skill}」を受け取った`);
     runSession();
   });
   document.getElementById('lnext').onclick = () => {
@@ -210,6 +215,7 @@ function endReview(li, exId) {
 }
 function finishLesson(li, exId) {
   state = L.recordLesson(state, li, today(), exId); save();
+  sfx.learn(); toast(`技「${LESSONS[li].skill}」を覚えた`);
   runSession(LESSONS[li].focus);
 }
 /** 作例に出てくる色だけの凡例 */
@@ -227,15 +233,17 @@ function startSession() {
   if (li != null) return showLesson(li, 0);
   runSession();
 }
+let titleQs = null;   // タイトルに出した文から始めるために、タイトルで先に決めた対戦
 function runSession(focus = []) {
-  const qs = L.selectSession(content, state, today(), Date.now(), { focus });
+  const qs = (!focus.length && titleQs) || L.selectSession(content, state, today(), Date.now(), { focus });
+  titleQs = null;
   if (!qs.length) return toast('出せる文がない');
   session = { qs, k: 0, results: [] };
   showQuestion();
 }
 function showQuestion() {
   const q = session.qs[session.k], s = byId(q.sid);
-  const head = `<div class="qhead"><span>${session.k + 1} / ${session.qs.length}${q.review ? '　復習' : ''}</span><button class="link" id="quit" style="padding:0">やめる</button></div>
+  const head = `<div class="qhead"><span>ターン ${session.k + 1} / ${session.qs.length}${q.review ? '　再戦' : ''}</span><button class="link" id="quit" style="padding:0">やめる</button></div>
     <div class="prompt">${PROMPT[q.fmt]}</div>`;
   let body = '';
   if (q.fmt === 'A' || q.fmt === 'B') {
@@ -308,7 +316,7 @@ function answer(a, el) {
   const prev = (s.referents ?? []).find(r => r.sent);
   const prevS = prev ? byId(prev.sent) : null;
   document.getElementById('after').innerHTML = `
-    <div class="verdict${ok ? ' ok' : ''}">${ok ? '正解' : '不正解'}</div>
+    <div class="verdict${ok ? ' ok' : ''}">${ok ? '命中' : 'はずれ'}</div>
     ${!ok && yours ? `<div class="yours">あなたの選んだ読み：${yours}</div>` : ''}
     <div class="explain">
       ${prevS ? sentenceHTML(prevS, { prev: true, highlight: { refdst: range(prev.range) } }) : ''}
@@ -319,10 +327,12 @@ function answer(a, el) {
         ${hard ? `<dt>難語</dt><dd>${hard}</dd>` : ''}
         ${s.note ? `<dt>構造</dt><dd>${esc(s.note)}</dd>` : ''}
       </dl>
-      <button class="link" id="flag">この解析はおかしい</button><span class="muted">${s.id}</span>
+      ${speakBtn()}<button class="link" id="flag">この解析はおかしい</button><span class="muted">${s.id}</span>
     </div>
     ${info && canAsk(s) ? senseiBoxHTML(s.id) : ''}`;
   if (info && canAsk(s)) bindSensei(document.querySelector('.chat'), s, info);
+  ok ? sfx.hit() : sfx.miss();
+  bindSpeak(s);
   document.getElementById('flag').onclick = e => { state.flags.push(s.id); save(); e.target.textContent = '記録した（書き出しで送れる）'; e.target.disabled = true; };
   document.querySelector('.verdict').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const last = session.k === session.qs.length - 1;
@@ -416,13 +426,47 @@ function bindSensei(box, s, info) {
   };
 }
 
+// ---- 読み上げ（押したときだけ。骨格の切れ目で区切る） ----
+const speakBtn = () => Voice.canSpeak() ? '<button class="link speak" id="speak" type="button">▶ 読む</button>' : '';
+function bindSpeak(s) {
+  const b = document.getElementById('speak');
+  if (b && s) b.onclick = () => Voice.speak(L.speechChunks(s), b);
+}
+
+// ---- タイトル（1.5秒。タップで飛ばせる） → 単語カードのパック → 対戦 ----
+function showTitle() {
+  const t = today();
+  if (L.lessonDue(state, t, LESSONS.length) == null) titleQs = L.selectSession(content, state, t);
+  const s = L.titleSentence(content, state, t) ?? (titleQs?.length ? byId(titleQs[0].sid) : null);
+  const el = document.createElement('div');
+  el.className = 'title-screen';
+  el.innerHTML = `${s ? `<div class="t-sent">${esc(s.text)}</div><div class="t-line"></div>` : ''}
+    <div class="t-logo">下線部</div><div class="t-days">あと ${Math.max(0, L.daysUntilExam(t))} 日</div>`;
+  document.body.append(el);
+  let gone = false;
+  const go = tapped => {
+    if (gone) return; gone = true;
+    if (tapped) sfx.title();
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 260);
+    let eit = null;
+    try { eit = JSON.parse(localStorage.getItem('eitango.v1')); } catch {}
+    if (L.packReady(eit)) { location.href = 'eitango/?then=battle'; return; }
+    startSession();
+  };
+  el.addEventListener('pointerdown', () => go(true));
+  setTimeout(() => go(false), 1700);
+}
+
 const range = r => Array.from({ length: r[1] - r[0] + 1 }, (_, i) => r[0] + i);
 
 function showSummary() {
   const r = session.results;
-  view(`<h1>${r.filter(x => x.ok).length} / ${r.length}</h1>
+  const hits = r.filter(x => x.ok).length;
+  sfx.win(hits);
+  view(`<h1>対戦終了</h1><p class="score">命中 <b>${hits}</b> / ${r.length}</p>
     <ul class="plain">${r.map((x, i) => `<li>${x.ok ? '○' : '×'}　形式${x.fmt}　<span class="muted">${x.sid}</span>${!x.ok && x.info && canAsk(byId(x.sid)) ? `　<button class="link ask" data-ask="${i}">Claude先生に聞く</button>` : ''}</li>`).join('')}</ul>`,
-    `<button class="btn" id="again">もう一度5問</button><button class="btn sub" id="home">ホーム</button>`);
+    `<button class="btn" id="again">もう一度対戦</button><button class="btn sub" id="home">ホーム</button>`);
   document.getElementById('again').onclick = startSession;
   document.getElementById('home').onclick = showHome;
   $app.querySelectorAll('[data-ask]').forEach(el => el.onclick = () => showSensei(r[+el.dataset.ask]));
@@ -515,7 +559,7 @@ function finishBoss(b, sec, answers) {
   view(`${r.defeated ? `<div class="slay"><h1>撃破</h1><div class="slaycount"><b id="slayn">${after > before ? before : after}</b><small>/20</small><span>骨格を取り切れた下線部</span></div></div>` : '<h1>挑戦済み</h1>'}
     <p class="muted">${b.year}年度 (${b.q})(${b.part})　所要 ${L.mmss(sec)}${why ? `　${why}` : ''}</p>
     ${r.missed.length ? `<h2>落とした項目</h2><ul class="plain">${r.missed.map(m => `<li>${esc(m.text)}</li>`).join('')}</ul>` : ''}
-    ${!r.defeated ? `<p class="muted">次の5問で ${b.types.join('・')} を多く出す。</p>` : ''}
+    ${!r.defeated ? `<p class="muted">次の対戦で ${b.types.join('・')} を多く出す。</p>` : ''}
     <h2>模範訳</h2><p>${esc(b.model_ja)}</p>
     <p class="muted">この篇の文は、今後の解剖にも出る。</p>`,
     `<button class="btn" id="copy">添削に出す（文面をコピー）</button><button class="btn sub" id="home">ホーム</button>`);
@@ -553,9 +597,10 @@ function showExport() {
   const inbox = L.inboxLines(content, state), unsent = L.inboxToSend(content, state).length;
   view(`<h1>書き出し</h1>
     <p class="muted">週報：今週の回数、正答率の低い型、多い誤読、ボスの状態、「おかしい」と押した文。<br>受け箱：解剖で間違えた文の難語（${inbox.length}語）。「単語カードへ送る」で、まだ送っていない${unsent}語が単語カードの新しいカードになる。</p>`,
-    `<button class="btn" id="week">週報をコピー</button><button class="btn sub" id="send">受け箱を単語カードへ送る（${unsent}語）</button><button class="btn sub" id="inbox">受け箱をコピー（${inbox.length}語）</button><button class="btn sub" id="load">コンテンツを入れ替える</button>${T.apiKey() ? '<button class="btn sub" id="forget">APIキーを消す</button>' : ''}<button class="btn sub" id="home">戻る</button>`);
+    `<button class="btn" id="week">週報をコピー</button><button class="btn sub" id="send">受け箱を単語カードへ送る（${unsent}語）</button><button class="btn sub" id="inbox">受け箱をコピー（${inbox.length}語）</button><button class="btn sub" id="load">コンテンツを入れ替える</button><button class="btn sub" id="mute">効果音：${muted() ? 'オフ' : 'オン'}</button>${T.apiKey() ? '<button class="btn sub" id="forget">APIキーを消す</button>' : ''}<button class="btn sub" id="home">戻る</button>`);
   document.getElementById('week').onclick = () => copy(L.weeklyText(content, state));
   document.getElementById('send').onclick = sendInbox;
+  document.getElementById('mute').onclick = () => { setMuted(!muted()); showExport(); };
   document.getElementById('inbox').onclick = () => inbox.length ? copy(inbox.join('\n')) : toast('まだない');
   document.getElementById('load').onclick = () => showLoad();
   document.getElementById('forget')?.addEventListener('click', () => { if (confirm('この端末に保存した APIキーを消します')) { T.setKey(''); toast('キーを消した'); showExport(); } });
@@ -574,5 +619,8 @@ function showExport() {
     session = { qs: [{ sid: m[1], fmt: m[2], review: false }], k: 0, results: [] };
     return showQuestion();
   }
-  showHome();
+  // 単語カードの開封から戻ったら、すぐ対戦
+  if (location.hash === '#battle') { history.replaceState(null, '', location.pathname); return startSession(); }
+  if (location.hash === '#home') { history.replaceState(null, '', location.pathname); return showHome(); }
+  showTitle();
 })();
