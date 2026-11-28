@@ -7,3 +7,6 @@ docs/
 PROMPTS.md
 .claude/
 .DS_Store
+
+# 中に置いた eitango のカード（正本の一文を含む）。公開は元の eitango リポジトリの分を読む。手元の確認用にだけ置く
+eitango/cards.json

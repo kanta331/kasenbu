@@ -140,7 +140,7 @@ function showHome() {
     }
     grid += '</div>';
   }
-  view(`<div class="top"><h1>下線部</h1><span><button class="link" id="lessons">講座</button><button class="link" id="export">書き出し</button></span></div>
+  view(`<div class="top"><h1>下線部</h1><span><a class="link" href="eitango/">単語カード</a><button class="link" id="lessons">講座</button><button class="link" id="export">書き出し</button></span></div>
     <div class="stats">
       <div class="stat"><b>${Math.max(0, L.daysUntilExam(t))}</b><span>試験まであと（日）</span></div>
       <div class="stat"><b>${L.defeatedCount(state)}<small style="font-size:16px">/20</small></b><span>骨格を取り切れた下線部（合格ライン（推定）${L.PASS_LINE}）</span></div>

@@ -1,0 +1,2334 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pocket英単語カード</title>
+<meta name="theme-color" content="#17866a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Pocket英単語カード">
+<!-- 下線部（kasenbu）の中に置いた版。ホーム画面への追加は下線部の manifest を使う -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e4dfd1; --bgdot:#cfc8b6; --ink:#1d1b16; --muted:#6c675c; --hint:#8a8477;
+  --face:#f8f4ea; --face2:#efe9da; --line:#dcd4c2;
+  --frame:#17866a; --frame2:#0f5f4b; --gold:#c89b3c; --teal:#1D9E75; --teal2:#9FE1CB; --purple:#7F77DD;
+  --red:#d33b2f;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){ --bg:#151b1d; --bgdot:#22302e; --hint:#7d877f; }
+}
+:root[data-theme="dark"]{ --bg:#151b1d; --bgdot:#22302e; --hint:#7d877f; }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); height:100%; }
+*,*::before,*::after{ box-sizing:inherit; }
+body{
+  margin:0; height:100%; background:var(--bg);
+  background-image:radial-gradient(var(--bgdot) 1px, transparent 1.2px);
+  background-size:18px 18px;
+  font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+  color:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:center;
+  overflow:hidden; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+}
+.stage{ perspective:1400px; position:relative; }
+.card{
+  --p:0;
+  position:relative; width:min(78vw,300px); aspect-ratio:63/88;
+  transform-style:preserve-3d; cursor:pointer; touch-action:none;
+  transition:transform .7s cubic-bezier(.2,.8,.2,1);
+}
+.card.flipped{ transform:rotateY(180deg); }
+.card.press{ transition:transform .15s ease-out; transform:scale(calc(1 + var(--p)*.05)) rotate(calc(var(--p)*var(--p)*1deg)); }
+.card.burst{ transition:transform .55s cubic-bezier(.3,0,.1,1), opacity .5s ease; transform:scale(1.18); opacity:0; }
+.face{
+  position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  border-radius:14px; overflow:hidden;
+  border:3px solid var(--frame);
+  box-shadow:inset 0 0 0 4px var(--face), inset 0 0 0 5px var(--gold),
+             0 18px 40px -18px rgba(0,0,0,.55);
+  background:var(--face);
+}
+.face.back{ transform:rotateY(180deg); background:#f3eee2; }
+/* charge ring + glow */
+.card::before{
+  content:""; position:absolute; inset:-9px; border-radius:22px; pointer-events:none;
+  background:conic-gradient(from -90deg, var(--teal) calc(var(--p)*360deg), transparent 0);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  opacity:calc(var(--p)*1.2); z-index:3;
+  transform:translateZ(1px);
+}
+.card::after{
+  content:""; position:absolute; inset:-2px; border-radius:16px; pointer-events:none;
+  box-shadow:0 0 calc(10px + var(--p)*60px) calc(var(--p)*14px) rgba(29,158,117,calc(.05 + var(--p)*.55));
+  z-index:-1;
+}
+.sheen{
+  position:absolute; inset:0; pointer-events:none; mix-blend-mode:soft-light; z-index:2;
+  background:linear-gradient(112deg, transparent 38%, rgba(255,255,255,.95) 50%, transparent 62%);
+  background-size:280% 100%; background-position:120% 0; opacity:.85;
+}
+.card.press .sheen{ animation:sheen .9s linear infinite; }
+@keyframes sheen{ from{ background-position:120% 0 } to{ background-position:-120% 0 } }
+/* sparks */
+.sparks{ position:absolute; inset:-30px; pointer-events:none; overflow:visible; z-index:4; }
+.spark{
+  position:absolute; bottom:10%; width:6px; height:6px; border-radius:50%;
+  background:var(--teal2); box-shadow:0 0 8px 2px rgba(93,202,165,.7);
+  animation:rise var(--d) cubic-bezier(.2,.6,.3,1) forwards;
+}
+@keyframes rise{ 0%{ transform:translate(0,0) scale(.4); opacity:0 } 15%{ opacity:1 } 100%{ transform:translate(var(--dx), calc(var(--dy)*-1)) scale(1.1); opacity:0 } }
+
+/* front content */
+.front{ padding:16px 15px 12px; display:flex; flex-direction:column; gap:8px; }
+.word{ display:flex; justify-content:space-between; align-items:baseline; }
+.word b{ font-family:"Fraunces",Georgia,"Times New Roman",serif; font-weight:400; font-size:34px; letter-spacing:-.01em; line-height:1; }
+.word b.l{ font-size:27px; } .word b.xl{ font-size:22px; line-height:1.1; }
+.word span{ font-size:11px; color:var(--muted); }
+.pron{ display:flex; gap:10px; align-items:baseline; margin-top:-2px; }
+.pron{ flex-wrap:wrap; row-gap:1px; } .pron code, .pron span{ white-space:nowrap; }
+.pron code{ font-family:"SF Mono",Menlo,monospace; font-size:13px; color:var(--muted); }
+.pron span{ font-size:12px; color:var(--hint); }
+.fig{ margin:2px 0 0; }
+.pills{ display:flex; gap:5px; flex-wrap:wrap; }
+.pills span{ font-size:11px; padding:2px 8px; border-radius:10px; background:#E1F5EE; color:#085041; }
+.pills span.mis{ background:#fbe7e4; color:#8a2318; }
+.pills span.n{ background:#EEEDFE; color:#3C3489; }
+.core{ font-size:11.5px; color:var(--muted); line-height:1.55; border-top:1px solid var(--line); padding-top:7px; }
+.ex{ border-top:1px solid var(--line); padding-top:7px; display:flex; flex-direction:column; gap:5px; }
+.ex p{ margin:0; font-size:12.5px; line-height:1.4; }
+.ex p b{ font-weight:600; color:var(--frame2); }
+.ex p small{ display:block; font-size:10.5px; color:var(--hint); }
+.foot{ margin-top:auto; display:flex; justify-content:space-between; font-size:10.5px; color:var(--hint); }
+.foot i{ font-style:normal; color:var(--gold); letter-spacing:2px; }
+@media (prefers-reduced-motion:no-preference){
+  .m-out .mv{ animation:yout 2.4s ease-in-out infinite }
+  .m-out .ar{ animation:yarr 2.4s ease-in-out infinite; transform-origin:0 50% }
+  .m-out .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-in .mv{ animation:yin 2.4s ease-in-out infinite }
+  .m-in .ar{ animation:yarr 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:100% 50% }
+  .m-in .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-block .mv{ animation:yblk 2.4s ease-in-out infinite }
+  .m-block .ar{ animation:yarr2 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0 50% }
+  .m-block .wl{ animation:ywall 2.4s ease-in-out infinite }
+  .m-block .gl{ animation:yhit 2.4s ease-in-out infinite }
+  .m-point .ar{ animation:yarr 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0 50% }
+  .m-point .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-change .mv{ animation:ychg 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:50% 50% }
+  .m-settle .mv{ animation:ysettle 2.4s ease-in-out infinite }
+  .m-settle .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-short .mv{ animation:yshort 2.4s ease-in-out infinite }
+  .m-short .gl{ animation:yhit 2.4s ease-in-out infinite }
+  .m-link .ar{ animation:ylinkln 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0 50% }
+  .m-link .mv{ animation:ylink 2.4s ease-in-out infinite }
+  .m-over .mv{ animation:yover 2.4s ease-in-out infinite }
+  .m-over .wl{ animation:ywall2 2.4s ease-in-out infinite }
+  .m-over .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-p-at .ar{ animation:yarrS 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0 0 }
+  .m-p-at .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-p-in .mv{ animation:ypin 2.4s ease-in-out infinite }
+  .m-p-in .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-p-on .mv{ animation:ypon 2.4s ease-in-out infinite }
+  .m-p-on .gl{ animation:yhit 2.4s ease-in-out infinite }
+  .m-p-to .mv{ animation:yto 2.4s ease-in-out infinite }
+  .m-p-to .ar{ animation:yarr 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0 50% }
+  .m-p-to .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-p-from .mv{ animation:yfrom 2.4s ease-in-out infinite }
+  .m-p-from .gl{ animation:yorig 2.4s ease-in-out infinite }
+  .m-p-with .mv{ animation:ywith 2.4s ease-in-out infinite }
+  .m-scale .bm{ animation:yscale 2.4s ease-in-out infinite; transform-origin:190px 60px }
+  .m-time .mv{ animation:ytime 2.4s ease-in-out infinite }
+  .m-time .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-flow .ar, .m-against .ar{ animation:yarr 2.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0 50% }
+  .m-flow .gl, .m-against .gl, .m-add .gl, .m-branch .gl, .m-gate .gl, .m-gauge .gl{ animation:ygl 2.4s ease-in-out infinite }
+  .m-against .ht{ animation:yhit2 2.4s ease-in-out infinite }
+  .m-add .mv{ animation:ydrop 2.4s ease-in-out infinite }
+  .m-contrast .ga{ animation:ycl 2.4s ease-in-out infinite }
+  .m-contrast .gb{ animation:ycr 2.4s ease-in-out infinite }
+  .m-branch .mv{ animation:ybranch 2.4s ease-in-out infinite }
+  .m-gate .mv{ animation:ygate 2.4s ease-in-out infinite }
+  .m-gate .arm{ animation:yarm 2.4s ease-in-out infinite; transform-origin:200px 60px }
+  .m-equal .mv{ animation:yeqcol 2.4s ease-in-out infinite }
+  .m-equal .gl{ animation:yeq 2.4s ease-in-out infinite }
+  .m-gauge .mv{ animation:ygauge 2.4s ease-in-out infinite; transform-origin:190px 108px }
+  .m-clarity .fog{ animation:yfog 2.4s ease-in-out infinite }
+  .m-thing .tg{ animation:yfloat 2.4s ease-in-out infinite }
+  .m-thing .gl{ animation:yglow 2.4s ease-in-out infinite }
+}
+@keyframes yout{0%{transform:translate(0,0);opacity:1}15%{transform:translate(0,0)}70%{transform:translate(140px,0);opacity:1}85%{transform:translate(140px,0);opacity:0}100%{transform:translate(0,0);opacity:0}}
+@keyframes yarr{0%{transform:scaleX(0)}15%{transform:scaleX(0)}70%{transform:scaleX(1)}85%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes ygl{0%,60%{opacity:0}75%{opacity:1}100%{opacity:0}}
+@keyframes yin{0%{transform:translate(140px,0);opacity:0}15%{transform:translate(140px,0);opacity:1}70%{transform:translate(0,0);opacity:1}85%{transform:translate(0,0);opacity:1}100%{transform:translate(0,0);opacity:0}}
+@keyframes yblk{0%{transform:translate(0,0);opacity:0}12%{transform:translate(0,0);opacity:1}55%{transform:translate(158px,0)}66%{transform:translate(136px,0)}85%{transform:translate(136px,0);opacity:1}100%{transform:translate(136px,0);opacity:0}}
+@keyframes yarr2{0%,12%{transform:scaleX(0)}55%{transform:scaleX(1)}85%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes ywall{0%,54%{transform:translate(0,0)}58%{transform:translate(3px,0)}62%{transform:translate(-1px,0)}66%,100%{transform:translate(0,0)}}
+@keyframes yhit{0%,52%{opacity:0}58%{opacity:1}78%,100%{opacity:0}}
+@keyframes ychg{0%{transform:translate(0,0) scale(1);fill:#9FE1CB;stroke:#1D9E75;opacity:0}8%{opacity:1}15%{transform:translate(0,0) scale(1);fill:#9FE1CB;stroke:#1D9E75}70%{transform:translate(240px,0) scale(1.45);fill:#CECBF6;stroke:#7F77DD}85%{transform:translate(240px,0) scale(1.45);fill:#CECBF6;stroke:#7F77DD;opacity:1}100%{transform:translate(240px,0) scale(1.45);fill:#CECBF6;stroke:#7F77DD;opacity:0}}
+@keyframes ysettle{0%{transform:translate(-70px,-17px);opacity:0}8%{transform:translate(-70px,-17px);opacity:1}25%{transform:translate(55px,-11px)}40%{transform:translate(-35px,-4px)}52%{transform:translate(20px,-1px)}62%{transform:translate(-8px,0)}70%{transform:translate(0,0)}88%{transform:translate(0,0);opacity:1}100%{transform:translate(0,0);opacity:0}}
+@keyframes yshort{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}50%{transform:translate(130px,0)}62%{transform:translate(148px,38px);opacity:1}72%{transform:translate(152px,56px);opacity:0}100%{transform:translate(152px,56px);opacity:0}}
+@keyframes ylinkln{0%{transform:scaleX(0)}28%{transform:scaleX(1)}90%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes ylink{0%,30%{transform:translate(0,0);opacity:0}36%{transform:translate(0,0);opacity:1}60%{transform:translate(194px,0)}84%{transform:translate(0,0);opacity:1}90%,100%{transform:translate(0,0);opacity:0}}
+@keyframes yover{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}38%{transform:translate(123px,0)}46%{transform:translate(116px,0)}56%{transform:translate(140px,-62px)}64%{transform:translate(185px,-52px)}72%{transform:translate(230px,0)}88%{transform:translate(230px,0);opacity:1}100%{transform:translate(230px,0);opacity:0}}
+@keyframes yarrS{0%,10%{transform:scale(0)}55%{transform:scale(1)}88%{transform:scale(1)}100%{transform:scale(0)}}
+@keyframes ypin{0%{transform:translate(-175px,0);opacity:0}12%{transform:translate(-175px,0);opacity:1}62%{transform:translate(0,0)}88%{transform:translate(0,0);opacity:1}100%{transform:translate(0,0);opacity:0}}
+@keyframes ypon{0%{transform:translate(0,-62px);opacity:0}10%{transform:translate(0,-62px);opacity:1}45%{transform:translate(0,0)}52%{transform:translate(0,-9px)}58%{transform:translate(0,0)}88%{transform:translate(0,0);opacity:1}100%{transform:translate(0,0);opacity:0}}
+@keyframes yto{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}65%{transform:translate(214px,0)}88%{transform:translate(214px,0);opacity:1}100%{transform:translate(214px,0);opacity:0}}
+@keyframes yfrom{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}20%{transform:translate(0,0)}75%{transform:translate(180px,0);opacity:.9}90%,100%{transform:translate(200px,0);opacity:0}}
+@keyframes yorig{0%,15%{opacity:1}35%,100%{opacity:0}}
+@keyframes ywith{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}72%{transform:translate(210px,0)}88%{transform:translate(210px,0);opacity:1}100%{transform:translate(210px,0);opacity:0}}
+@keyframes yscale{0%,10%{transform:rotate(0)}40%{transform:rotate(11deg)}50%{transform:rotate(7deg)}58%{transform:rotate(9deg)}86%{transform:rotate(9deg)}100%{transform:rotate(0)}}
+@keyframes ytime{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}70%{transform:translate(240px,0)}88%{transform:translate(240px,0);opacity:1}100%{transform:translate(240px,0);opacity:0}}
+@keyframes yhit2{0%,36%{opacity:0}43%{opacity:1}62%,100%{opacity:0}}
+@keyframes ydrop{0%{transform:translate(0,-40px);opacity:0}15%{transform:translate(0,-40px);opacity:1}45%{transform:translate(0,0)}52%{transform:translate(0,-4px)}58%{transform:translate(0,0)}88%{transform:translate(0,0);opacity:1}100%{transform:translate(0,0);opacity:0}}
+@keyframes ycl{0%,8%{opacity:0}22%{opacity:1}42%{opacity:1}52%,100%{opacity:0}}
+@keyframes ycr{0%,46%{opacity:0}60%{opacity:1}84%{opacity:1}96%,100%{opacity:0}}
+@keyframes ybranch{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}40%{transform:translate(130px,0)}72%{transform:translate(265px,31px)}88%{transform:translate(265px,31px);opacity:1}100%{transform:translate(265px,31px);opacity:0}}
+@keyframes ygate{0%{transform:translate(0,0);opacity:0}10%{transform:translate(0,0);opacity:1}35%{transform:translate(118px,0)}52%{transform:translate(118px,0)}75%{transform:translate(240px,0)}88%{transform:translate(240px,0);opacity:1}100%{transform:translate(240px,0);opacity:0}}
+@keyframes yarm{0%,38%{transform:rotate(0)}50%{transform:rotate(-80deg)}80%{transform:rotate(-80deg)}92%,100%{transform:rotate(0)}}
+@keyframes yeqcol{0%,35%{fill:#CECBF6;stroke:#7F77DD}55%{fill:#9FE1CB;stroke:#1D9E75}88%{fill:#9FE1CB;stroke:#1D9E75}100%{fill:#CECBF6;stroke:#7F77DD}}
+@keyframes yeq{0%,25%{opacity:0}40%{opacity:1}88%{opacity:1}100%{opacity:0}}
+@keyframes ygauge{0%,10%{transform:rotate(0)}60%{transform:rotate(var(--a))}88%{transform:rotate(var(--a))}100%{transform:rotate(0)}}
+@keyframes yfog{0%,10%{opacity:1}60%{opacity:var(--f)}88%{opacity:var(--f)}100%{opacity:1}}
+@keyframes yfloat{0%,100%{transform:translate(0,0)}50%{transform:translate(0,-5px)}}
+@keyframes yglow{0%,100%{opacity:.15}50%{opacity:1}}
+@keyframes ywall2{0%,37%{transform:translate(0,0)}41%{transform:translate(4px,0)}45%{transform:translate(-1px,0)}50%{transform:translate(3px,0)}56%,100%{transform:translate(0,0)}}
+
+/* back */
+.back svg{ width:100%; height:100%; display:block; }
+
+/* etymology face */
+.etym{
+  position:fixed; inset:0; z-index:20; background:var(--face);
+  color:var(--ink); padding:calc(env(safe-area-inset-top,0px) + 28px) 26px calc(env(safe-area-inset-bottom,0px) + 24px);
+  clip-path:circle(0 at var(--cx,50%) var(--cy,50%)); visibility:hidden;
+  display:flex; flex-direction:column; overflow-y:auto;
+}
+.etym.show{ visibility:visible; clip-path:circle(160% at var(--cx,50%) var(--cy,50%)); transition:clip-path .75s cubic-bezier(.2,.7,.1,1); }
+.etym.hide{ visibility:visible; clip-path:circle(0 at var(--cx,50%) var(--cy,50%)); transition:clip-path .5s cubic-bezier(.6,0,.8,.3), visibility 0s .5s; }
+.etym h1{ font-family:"Fraunces",Georgia,serif; font-weight:300; font-size:54px; margin:0 0 4px; letter-spacing:-.02em; line-height:1; }
+.etym h1.l{ font-size:40px; line-height:1.1; }
+.etym .old{ font-family:"Fraunces",Georgia,serif; font-style:italic; font-size:18px; color:var(--muted); margin:0 0 26px; }
+.etym p{ font-size:15.5px; line-height:1.9; margin:0 0 18px; max-width:34em; }
+.etym .src{ margin-top:auto; font-size:11px; color:var(--hint); display:flex; justify-content:space-between; align-items:center; }
+.etym button{
+  appearance:none; border:1px solid var(--line); background:transparent; color:var(--muted);
+  font:inherit; font-size:13px; padding:8px 16px; border-radius:20px;
+}
+.etym button:focus-visible{ outline:2px solid var(--teal); outline-offset:2px; }
+/* Claude先生に聞く（LINE 風の掛け合い。bunka-cards と同じ形） */
+.chat{ margin:4px 0 22px; max-width:34em; background:#eef1ea; border-radius:14px; padding:12px 10px 10px; }
+.etym h1 + .chat{ margin-top:22px; }
+.chat-log{ display:flex; flex-direction:column; gap:10px; margin-bottom:10px; }
+.chat-log:empty{ display:none; }
+.chat-tools{ display:flex; justify-content:flex-end; margin:-4px 0 6px; }
+.chat-tools[hidden]{ display:none; }
+.etym .chat .chat-tools button{ background:none; border:0; color:var(--hint); font-size:11.5px; padding:2px 4px; text-decoration:underline; text-underline-offset:2px; }
+.chat-etym{ margin:0 0 8px; }
+.etym .chat .chat-etym button{ background:#fff; color:#1f7a44; border:1px solid #2e9d5a; }
+.msg{ display:flex; align-items:flex-end; gap:7px; }
+.msg.k{ flex-direction:row-reverse; }
+.msg .av{ flex:none; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; background:#fff; }
+.msg.t .av{ border:2px solid #9a9a9a; color:#6b6b6b; font-family:"Hiragino Mincho ProN","Yu Mincho","YuMincho","Noto Serif JP",serif; }
+.msg.k .av{ border:2px solid #2e9d5a; color:#1f7a44; }
+.msg .who{ display:block; font-size:10.5px; color:var(--hint); margin:0 4px 2px; }
+.msg.k .who{ text-align:right; }
+.msg .bub{ max-width:78%; }
+.etym .msg p{ margin:0; padding:8px 12px; border-radius:16px; font-size:14.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; max-width:none; }
+.msg.t p{ background:#fff; color:var(--ink); border-bottom-left-radius:4px; }
+.msg.k p{ background:#a8e6a0; color:#14321b; border-bottom-right-radius:4px; }
+.etym .msg.err p{ background:#fbe7e4; color:#7a1f17; font-size:13px; }
+.msg.typing p{ color:var(--hint); letter-spacing:.2em; }
+@keyframes fg-in{ from{ opacity:0; transform:translateY(4px) } to{ opacity:1; transform:none } }
+@media (prefers-reduced-motion:no-preference){ .msg.typing p{ animation:breathe 1.2s ease-in-out infinite; } .msg.new{ animation:fg-in .25s ease-out; } }
+.chat form{ display:flex; gap:8px; align-items:center; }
+.chat input{ flex:1; min-width:0; font:inherit; font-size:16px; padding:8px 14px; border-radius:20px; border:1px solid var(--line); background:#fff; color:var(--ink); }
+.chat input:focus-visible{ outline:2px solid #2e9d5a; outline-offset:1px; }
+.etym .chat form button{ flex:none; font-size:13px; padding:8px 14px; background:#2e9d5a; border-color:#2e9d5a; color:#fff; }
+.chat.nokey button, .etym .chat button:disabled{ color:var(--hint); background:var(--face2); border-color:var(--line); border-style:dashed; }
+.keydlg{ border:0; border-radius:16px; padding:22px 20px 18px; width:min(92vw,360px); background:var(--face); color:var(--ink); box-shadow:0 20px 50px -20px rgba(0,0,0,.6); }
+.keydlg::backdrop{ background:rgba(20,22,20,.55); }
+.keydlg h3{ margin:0 0 8px; font-size:16px; }
+.keydlg p{ margin:0 0 14px; font-size:12.5px; line-height:1.7; color:var(--muted); }
+.keydlg input{ width:100%; font:inherit; font-size:16px; padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--ink); }
+.keydlg .row2{ display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+.keydlg .btn{ font-size:14px; padding:9px 18px; }
+.flash{ position:fixed; inset:0; background:#fff; pointer-events:none; opacity:0; z-index:19; }
+.flash.go{ animation:flash .55s ease-out; }
+@keyframes flash{ 0%{opacity:0} 18%{opacity:.95} 100%{opacity:0} }
+
+.hint{ margin-top:22px; font-size:12px; color:var(--hint); text-align:center; line-height:1.6; }
+@media (prefers-reduced-motion:reduce){
+  .card, .card.press, .etym.show, .etym.hide{ transition:none } .spark{ display:none } .flash.go{ animation:none }
+}
+
+/* ===== アプリ画面 ===== */
+:root{ --onbg:#1d1b16; --onbg2:#6c675c; }
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){ --onbg:#ece6d8; --onbg2:#9aa39b; }
+}
+:root[data-theme="dark"]{ --onbg:#ece6d8; --onbg2:#9aa39b; }
+
+.screen{
+  position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+  padding:calc(env(safe-area-inset-top,0px) + 20px) 16px calc(env(safe-area-inset-bottom,0px) + 20px);
+  color:var(--onbg);
+}
+.screen.on{ display:flex; }
+.btn{
+  appearance:none; border:1px solid var(--line); background:var(--face); color:var(--ink);
+  font:inherit; font-size:15px; padding:11px 26px; border-radius:24px; cursor:pointer;
+  box-shadow:0 6px 18px -10px rgba(0,0,0,.4);
+}
+.btn.primary{ background:var(--frame); border-color:var(--frame); color:#fff; }
+.btn:disabled{ opacity:.45; cursor:default; }
+.btn:focus-visible, .link:focus-visible, .tile:focus-visible, .pack:focus-visible, .x:focus-visible{ outline:2px solid var(--teal); outline-offset:3px; }
+.link{ appearance:none; border:0; background:none; font:inherit; font-size:13px; color:var(--onbg2); padding:8px; cursor:pointer; }
+.x{
+  position:absolute; top:calc(env(safe-area-inset-top,0px) + 12px); left:12px;
+  appearance:none; border:0; background:none; font-size:26px; line-height:1; color:var(--onbg2); padding:8px 12px; cursor:pointer;
+}
+
+/* パック：ゲージは中の光の水位 */
+.pack{
+  --g:0;
+  position:relative; width:min(58vw,220px); aspect-ratio:63/100; border-radius:10px; overflow:hidden;
+  background:linear-gradient(160deg, #1b9475 0%, #17866a 45%, #0f5f4b 100%);
+  box-shadow:inset 0 0 0 5px rgba(255,255,255,.06), inset 0 0 0 6px var(--gold), 0 22px 44px -20px rgba(0,0,0,.6);
+  cursor:pointer; touch-action:none; transition:transform .3s ease, box-shadow .3s ease;
+}
+.pack::before, .pack::after{
+  content:""; position:absolute; left:0; right:0; height:11px; z-index:3;
+  background:repeating-linear-gradient(90deg, rgba(0,0,0,.22) 0 2px, rgba(255,255,255,.08) 2px 5px);
+}
+.pack::before{ top:0; } .pack::after{ bottom:0; }
+.pk-fill{
+  position:absolute; left:0; right:0; bottom:0; height:calc(var(--g)*100%); z-index:1;
+  background:linear-gradient(to top, rgba(159,225,203,.55), rgba(159,225,203,.14));
+  border-top:1px solid rgba(255,255,255,.45); transition:height .8s cubic-bezier(.2,.8,.2,1);
+}
+.pk-in{ position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#f6efd9; }
+.pk-in svg{ width:42%; height:auto; }
+.pk-title{ font-family:"Fraunces",Georgia,serif; font-style:italic; font-weight:300; font-size:22px; letter-spacing:.02em; }
+.pk-sub{ font-size:11px; letter-spacing:.3em; opacity:.8; }
+.pack .sheen{ z-index:2; }
+.pack.ready{ box-shadow:inset 0 0 0 5px rgba(255,255,255,.06), inset 0 0 0 6px var(--gold), 0 0 34px 4px rgba(29,158,117,.45), 0 22px 44px -20px rgba(0,0,0,.6); }
+@media (prefers-reduced-motion:no-preference){
+  .pack.ready{ animation:bob 3.2s ease-in-out infinite; }
+  .pack.ready .sheen{ animation:sheen 3.2s linear infinite; }
+}
+@keyframes bob{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-6px) } }
+.pack.locked{ cursor:default; }
+
+/* パック棚：2種類のパックと、共有の1本のゲージ */
+.shelf{
+  position:relative; width:min(100%,380px); padding:22px 14px 16px; border-radius:22px;
+  background:linear-gradient(170deg, rgba(248,244,234,.92), rgba(239,233,218,.92));
+  box-shadow:0 18px 40px -24px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.6);
+}
+.shelf-packs{ display:flex; justify-content:center; gap:16px; }
+.shelf .pack{ width:min(36vw,140px); }
+.shelf .pk-in{ gap:9px; }
+.shelf .pk-title{ font-size:19px; }
+.shelf .pk-sub{ font-size:9.5px; letter-spacing:.18em; }
+.pack.tr{ background:linear-gradient(160deg, #2c3f78 0%, #22305f 50%, #151f42 100%); }
+.pack.tr.ready{ box-shadow:inset 0 0 0 5px rgba(255,255,255,.06), inset 0 0 0 6px var(--gold), 0 0 34px 4px rgba(127,119,221,.5), 0 22px 44px -20px rgba(0,0,0,.6); }
+.pk-name{ margin-top:8px; text-align:center; font-size:12px; color:var(--muted); letter-spacing:.08em; }
+.gauge{ margin:18px auto 0; width:86%; }
+.gauge-bar{ position:relative; height:10px; border-radius:6px; background:#e3dccb; overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,.12); }
+.gauge-bar i{ position:absolute; left:0; top:0; bottom:0; width:calc(var(--g,0)*100%); border-radius:6px;
+  background:linear-gradient(90deg, #9FE1CB, #1D9E75); transition:width .8s cubic-bezier(.2,.8,.2,1); }
+.gauge-txt{ display:flex; justify-content:space-between; margin-top:6px; font-size:12px; color:var(--muted); }
+.gauge-txt b{ font-weight:600; color:var(--frame2); }
+.home-status{ margin-top:22px; font-size:14px; text-align:center; line-height:1.7; min-height:3.4em; }
+.home-status small{ display:block; font-size:12px; color:var(--onbg2); }
+.home-quiz{ margin-top:14px; display:flex; gap:12px; justify-content:center; }
+.q-got{ margin:-18px 0 26px; font-size:14px; color:var(--onbg); text-align:center; line-height:1.8; max-width:20em; }
+.q-got b{ font-family:"Fraunces",Georgia,serif; font-weight:400; color:var(--frame2); }
+.home-foot{ position:absolute; bottom:calc(env(safe-area-inset-bottom,0px) + 10px); left:0; right:0; text-align:center; }
+
+/* 開封 */
+.tear-wrap{ position:relative; }
+.pk-top{
+  position:absolute; left:0; right:0; top:0; height:15%; z-index:4; pointer-events:none;
+  border-bottom:1.5px dashed rgba(246,239,217,.7);
+  transition:transform .55s cubic-bezier(.3,0,.2,1), opacity .55s ease;
+}
+.pk-cut{ position:absolute; left:0; bottom:-2px; height:3px; width:calc(var(--t,0)*100%); background:#fff; box-shadow:0 0 8px 2px rgba(159,225,203,.9); }
+.pack.torn .pk-top{ transform:translate(30px,-90px) rotate(16deg); opacity:0; }
+.pack.gone{ transition:transform .5s cubic-bezier(.4,0,.8,.4), opacity .5s ease; transform:translateY(40%) scale(.92); opacity:0; }
+.open-word{ font-family:"Fraunces",Georgia,serif; font-weight:400; font-size:36px; letter-spacing:-.01em; min-height:48px; margin-bottom:14px; transition:opacity .4s ease; text-align:center; }
+.open-word.off{ opacity:0; }
+.open-ctl{ margin-top:22px; min-height:48px; display:flex; gap:12px; align-items:center; justify-content:center; font-size:14px; color:var(--onbg2); }
+.open-count{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 18px); right:18px; font-size:12px; color:var(--onbg2); letter-spacing:.1em; }
+.recall{ animation:breathe 1.5s ease-in-out infinite; }
+@keyframes breathe{ 0%,100%{ opacity:.45 } 50%{ opacity:1 } }
+
+/* 結果一覧・コレクション */
+.list{ width:min(100%,360px); display:flex; flex-direction:column; gap:8px; margin:6px 0 22px; }
+.row{ display:flex; align-items:baseline; gap:10px; padding:10px 14px; border-radius:10px; background:var(--face); color:var(--ink); border:1px solid var(--line); }
+.row b{ font-family:"Fraunces",Georgia,serif; font-weight:400; font-size:20px; }
+.row span{ font-size:12px; color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row em, .tile em{ font-style:normal; font-size:11px; color:var(--hint); white-space:nowrap; }
+.tag{ font-size:10.5px; padding:1px 7px; border-radius:9px; background:#E1F5EE; color:#085041; white-space:nowrap; }
+.tag.k{ background:linear-gradient(100deg,#ffd6ec,#d6ecff,#dcffe6,#fff3c4); color:#5b4a14; }
+.h2{ font-family:"Fraunces",Georgia,serif; font-weight:300; font-size:28px; margin:0 0 14px; }
+
+#collection{ justify-content:flex-start; overflow-y:auto; padding-top:calc(env(safe-area-inset-top,0px) + 60px); }
+/* コレクションを選ぶ画面：初級／TR と、書き出し・読み込み・鍵を消す */
+.coll-pick{ width:min(100%,360px); display:flex; flex-direction:column; align-items:stretch; gap:14px; }
+.coll-pick[hidden], .coll-view[hidden]{ display:none; }
+.coll-pick .h2{ text-align:center; }
+.coll-btn{ appearance:none; border:0; cursor:pointer; font:inherit; display:flex; align-items:baseline; justify-content:space-between;
+  padding:22px 22px; border-radius:16px; color:#f6efd9; background:linear-gradient(160deg, #1b9475, #0f5f4b);
+  box-shadow:inset 0 0 0 4px rgba(255,255,255,.06), inset 0 0 0 5px var(--gold), 0 14px 30px -18px rgba(0,0,0,.6); }
+.coll-btn.tr{ background:linear-gradient(160deg, #2c3f78, #151f42); }
+.coll-btn b{ font-family:"Fraunces",Georgia,serif; font-style:italic; font-weight:400; font-size:24px; }
+.coll-btn span{ font-size:13px; opacity:.9; }
+.coll-btn:focus-visible{ outline:2px solid var(--teal); outline-offset:3px; }
+.coll-view{ width:min(100%,420px); display:flex; flex-direction:column; align-items:center; }
+.coll-view .h2{ margin:0 0 16px; }
+.grid{ width:min(100%,420px); display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:10px; }
+.tile{
+  position:relative; appearance:none; font:inherit; cursor:pointer; aspect-ratio:63/88; border-radius:9px; overflow:hidden;
+  border:2px solid var(--frame); background:var(--face); color:var(--ink);
+  box-shadow:inset 0 0 0 3px var(--face), inset 0 0 0 3.5px var(--gold), 0 8px 18px -12px rgba(0,0,0,.5);
+  display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; padding:10px 9px 8px; text-align:left;
+}
+.tile b{ font-family:"Fraunces",Georgia,serif; font-weight:400; font-size:17px; line-height:1.1; word-break:break-word; }
+.tile i{ font-style:normal; color:var(--gold); font-size:10px; letter-spacing:1px; }
+.tile .tf{ display:flex; flex-direction:column; gap:2px; }
+.empty{ color:var(--onbg2); font-size:14px; margin:40px 0; text-align:center; line-height:1.8; }
+.save{ display:flex; gap:10px; margin:30px 0 10px; flex-wrap:wrap; justify-content:center; }
+.save .btn{ font-size:13px; padding:9px 18px; }
+
+/* TR カード：出自バッジと、長押し面の一文 */
+.word .badge{ font-size:11px; padding:1px 7px; border-radius:8px; background:#22305f; color:#f3eee2; letter-spacing:.04em; }
+.tile .badge{ position:absolute; top:8px; right:7px; font-size:9px; padding:0 5px; border-radius:6px; background:#22305f; color:#f3eee2; }
+.etym .sent{ font-size:17px; line-height:1.9; margin:0 0 18px; font-family:"Fraunces",Georgia,serif; }
+.etym .sent b{ font-weight:600; color:var(--frame2); }
+/* 長押し面の TR 番号：押すと全文 */
+.etym .old.trs{ display:flex; flex-wrap:wrap; gap:8px; font-style:normal; }
+.etym .trbtn{ font-family:"Fraunces",Georgia,serif; font-style:italic; font-size:15px; color:var(--frame2); border-color:var(--teal); padding:5px 14px; }
+
+/* TR の全文（本文・和訳を書く欄・模範解答・SVO） */
+.psg{ position:fixed; inset:0; z-index:30; background:var(--face); color:var(--ink); overflow-y:auto; display:none;
+  padding:calc(env(safe-area-inset-top,0px) + 14px) 18px calc(env(safe-area-inset-bottom,0px) + 40px);
+  --n:#1D9E75; --a:#7F77DD; --m:#2f6fc4; --v:#d33b2f; }
+.psg.on{ display:block; }
+@media (prefers-reduced-motion:no-preference){ .psg.on{ animation:fg-in .25s ease-out; } }
+.psg-head{ display:flex; align-items:center; justify-content:space-between; margin:0 0 14px; }
+.psg-head b{ font-family:"Fraunces",Georgia,serif; font-style:italic; font-weight:400; font-size:22px; color:var(--frame2); }
+.psg button{ appearance:none; border:1px solid var(--line); background:transparent; color:var(--muted); font:inherit; font-size:13px; padding:8px 14px; border-radius:20px; cursor:pointer; }
+.psg button.on{ background:var(--frame); border-color:var(--frame); color:#fff; }
+.psg-tools{ display:flex; gap:8px; margin:0 0 10px; }
+
+.psg h3{ font-size:13px; color:var(--muted); font-weight:600; margin:22px 0 8px; letter-spacing:.05em; }
+.psg textarea{ width:100%; min-height:9em; font:inherit; font-size:16px; line-height:1.8; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff; color:var(--ink); resize:vertical; }
+.psg-saved{ font-size:11.5px; color:var(--hint); min-height:1.4em; margin-top:4px; }
+.psg-model-text{ margin-top:10px; padding:12px 14px; border-radius:12px; background:var(--face2); font-size:15px; line-height:1.9; }
+.psg-model-text[hidden]{ display:none; }
+.psg-note{ font-size:11.5px; color:var(--hint); margin:6px 0 0; }
+.psg-empty{ font-size:14px; line-height:1.9; color:var(--muted); }
+.psg-legend{ font-size:11px; color:var(--muted); line-height:1.9; margin:0 0 4px; visibility:hidden; }
+.psg-flow.on + .psg-legend, .psg-legend.on{ visibility:visible; }
+/* 先生に見てもらう（指摘だけ。点数は付けない） */
+.psg-review{ margin-top:8px; background:#eef1ea; border-radius:14px; padding:12px 10px; }
+.psg .psg-review-btn{ background:#2e9d5a; border-color:#2e9d5a; color:#fff; }
+.psg .psg-review-btn:disabled{ color:var(--hint); background:var(--face2); border-color:var(--line); border-style:dashed; }
+.psg-reviews{ display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+.psg-reviews:empty{ display:none; }
+.psg .msg p{ margin:0; padding:8px 12px; border-radius:16px; font-size:14.5px; line-height:1.75; white-space:pre-wrap; word-break:break-word; }
+.psg .msg.err p{ background:#fbe7e4; color:#7a1f17; font-size:13px; }
+.rv-date{ font-size:11px; color:var(--hint); margin:0 0 4px 40px; }
+.rv details{ margin:6px 0 0 40px; font-size:12.5px; color:var(--muted); }
+.rv details p{ margin:4px 0 0; line-height:1.8; white-space:pre-wrap; }
+/* SVO 分解：[ ] 名詞 ( ) 名詞の説明 < > 副詞、動詞に下線、語の下に S V O C M */
+.psg-flow{ font-family:"Fraunces",Georgia,serif; font-size:15.5px; line-height:2.6; word-spacing:.12em; margin:0 0 8px; }
+/* かっこは幅を持たせて語の間に置く。原文のときも幅は残すので、切り替えても語の位置は変わらない */
+.svo .bk::before{ content:attr(data-c); font-weight:600; font-size:.95em; pointer-events:none; }
+.svo .bk.o::before{ margin-right:.06em; }
+.svo .bk.c::before{ margin-left:.06em; }
+.svo .bk.n::before{ color:var(--n); } .svo .bk.a::before{ color:var(--a); } .svo .bk.m::before{ color:var(--m); }
+.svo .u{ text-decoration:underline; text-decoration-color:var(--v); text-decoration-thickness:2px; text-underline-offset:4px; }
+.svo .w{ position:relative; }
+.svo .w > .lb{ position:absolute; left:50%; top:100%; margin-top:2px; transform:translateX(-50%); white-space:nowrap; line-height:1; }
+.svo .w > .lb.long{ left:0; transform:none; }
+.svo .lb{ font-family:-apple-system,"Hiragino Sans",sans-serif; font-size:10.5px; font-weight:700; }
+.svo .lb.S, .svo .lb.O, .svo .lb.C{ color:var(--n); }
+.svo .lb.V{ color:var(--v); } .svo .lb.M{ color:var(--m); } .svo .lb.A{ color:var(--a); }
+.svo .lb.sub{ opacity:.8; }
+/* 原文のとき：飾りだけ消す（文字の位置は変わらない） */
+.psg-flow:not(.on) .bk::before, .psg-flow:not(.on) .lb{ visibility:hidden; }
+.psg-flow:not(.on) .u{ text-decoration-color:transparent; }
+
+/* キラ加工：知らなかった語 */
+.holo{ position:absolute; inset:0; pointer-events:none; z-index:1; mix-blend-mode:multiply; opacity:.55;
+  background:linear-gradient(115deg, transparent 15%, #ffc9e6 28%, #c9e6ff 40%, #ccffdc 52%, #fff0b3 64%, #ffc9e6 76%, transparent 88%);
+  background-size:300% 300%; background-position:0% 50%;
+}
+@media (prefers-reduced-motion:no-preference){ .holo{ animation:holo 6s ease-in-out infinite alternate; } }
+@keyframes holo{ from{ background-position:0% 50% } to{ background-position:100% 50% } }
+
+/* 小テスト */
+#quiz{ justify-content:flex-start; padding-top:calc(env(safe-area-inset-top,0px) + 70px); overflow-y:auto; }
+#quiz > *{ flex-shrink:0; }
+.q-dir{ font-size:12px; color:var(--onbg2); letter-spacing:.1em; }
+.q-n{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 22px); right:18px; font-size:12px; color:var(--onbg2); letter-spacing:.1em; }
+.q-word{ margin:14px 0 30px; text-align:center; min-height:64px; display:flex; align-items:center; }
+.q-word.en{ font-family:"Fraunces",Georgia,serif; font-weight:400; font-size:38px; letter-spacing:-.01em; }
+.q-word.sent{ font-family:"Fraunces",Georgia,serif; font-size:18px; line-height:1.75; max-width:22em; display:block; text-align:center; min-height:0; }
+.q-word .blank{ display:inline-block; min-width:3.2em; border-bottom:2px solid var(--teal); color:transparent; margin:0 .15em; line-height:1.2; }
+.q-word.ja{ font-size:20px; line-height:1.6; max-width:20em; }
+.q-opts{ width:min(100%,360px); display:flex; flex-direction:column; gap:10px; }
+.q-opts .btn{ text-align:left; border-radius:14px; padding:13px 18px; font-size:15px; line-height:1.45; }
+.q-opts .btn.en{ font-family:"Fraunces",Georgia,serif; font-size:19px; }
+.q-opts .btn.ok{ background:#E1F5EE; border-color:var(--teal); color:#085041; }
+.q-opts .btn.ng{ background:#fbe7e4; border-color:var(--red); color:#7a1f17; }
+.q-plus{ height:22px; margin-top:16px; font-size:14px; color:var(--teal); opacity:0; transition:opacity .2s; }
+.q-plus.on{ opacity:1; }
+.q-show{ position:fixed; inset:0; z-index:10; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(20,22,20,.55); }
+.q-show.on{ display:flex; }
+.q-show .card{ pointer-events:none; }
+.q-show .cap{ color:#f3eee2; font-size:13px; margin-top:16px; }
+.simple .front{ justify-content:center; gap:18px; padding:22px 20px 14px; }
+.simple .word b{ font-size:30px; }
+.simple .mean{ font-size:16px; line-height:1.8; color:var(--ink); border-top:1px solid var(--line); padding-top:14px; }
+.q-end{ font-family:"Fraunces",Georgia,serif; font-weight:300; font-size:56px; color:var(--onbg); line-height:1; }
+.q-end-sub{ margin:12px 0 30px; font-size:14px; color:var(--onbg2); }
+
+#viewer .hint{ color:var(--onbg2); }
+/* カードを開いた画面：左右の ‹ › とスワイプでめくる。下に「覚えた気がする」 */
+#viewer{ justify-content:flex-start; overflow-y:auto; }
+#viewer > *{ flex-shrink:0; }
+#viewer > .v-top{ margin-top:auto; }
+#viewer > .v-chat{ margin-bottom:auto; }
+.v-n{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 22px); right:18px; font-size:12px; color:var(--onbg2); letter-spacing:.1em; }
+.v-top{ position:relative; display:flex; align-items:center; justify-content:center; width:100%; padding-top:36px; }
+.v-nav{ position:absolute; top:calc(50% + 18px); transform:translateY(-50%); z-index:2; appearance:none; border:0; background:none; cursor:pointer;
+  font-family:"Fraunces",Georgia,serif; font-size:34px; line-height:1; color:var(--onbg2); padding:14px 6px; }
+.v-nav.prev{ left:max(0px, calc(50% - 150px - 40px)); } .v-nav.next{ right:max(0px, calc(50% - 150px - 40px)); }
+.v-nav[hidden]{ display:none; }
+.v-nav:focus-visible{ outline:2px solid var(--teal); outline-offset:2px; border-radius:8px; }
+@media (prefers-reduced-motion:no-preference){
+  #viewerStage.in-l{ animation:v-in-l .28s ease-out; } #viewerStage.in-r{ animation:v-in-r .28s ease-out; }
+}
+@keyframes v-in-l{ from{ transform:translateX(40px); opacity:0 } to{ transform:none; opacity:1 } }
+@keyframes v-in-r{ from{ transform:translateX(-40px); opacity:0 } to{ transform:none; opacity:1 } }
+.v-claim{ margin-top:16px; }
+.v-claim[hidden]{ display:none; }
+.v-chat{ width:min(100%,380px); display:flex; flex-direction:column; gap:10px; margin-top:14px; background:#eef1ea; border-radius:14px; padding:12px 10px; }
+.v-chat:empty{ display:none; }
+#viewer .msg p, #ctest .msg p{ margin:0; padding:8px 12px; border-radius:16px; font-size:14.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+/* コレクションテスト（LINE 風）。4択は KANTAくん側の吹き出しから選ぶ */
+.coll-test{ margin:0 0 18px; }
+#ctest{ justify-content:flex-start; overflow-y:auto; padding-top:calc(env(safe-area-inset-top,0px) + 60px); }
+#ctest > *{ flex-shrink:0; }
+.ct-log{ width:min(100%,420px); display:flex; flex-direction:column; gap:10px; background:#eef1ea; border-radius:14px; padding:12px 10px 16px; margin-bottom:30px; }
+.ct-opts{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; margin:2px 0 0; padding-right:39px; }
+.ct-opt{ appearance:none; font:inherit; cursor:pointer; max-width:82%; text-align:left; padding:9px 14px; border-radius:16px; border-bottom-right-radius:4px;
+  background:#fff; color:#14321b; border:1.5px solid #2e9d5a; font-size:14.5px; line-height:1.5; }
+.ct-opt.en{ font-family:"Fraunces",Georgia,serif; font-size:17px; }
+.ct-opt:focus-visible{ outline:2px solid var(--teal); outline-offset:2px; }
+.msg p.en{ font-family:"Fraunces",Georgia,serif; font-size:17px; }
+.msg .blank{ display:inline-block; min-width:3em; border-bottom:2px solid #2e9d5a; color:transparent; margin:0 .1em; line-height:1.2; }
+.msg .sentq{ display:block; margin-top:6px; font-family:"Fraunces",Georgia,serif; font-size:16px; line-height:1.75; }
+.ct-end{ align-self:center; margin-top:14px; }
+.tile .lrn{ font-style:normal; font-size:9.5px; color:var(--hint); line-height:1.3; }
+.to-kasenbu{ position:fixed; z-index:5; top:calc(env(safe-area-inset-top,0px) + 4px); left:8px; padding:8px 6px; font-size:14px; color:var(--muted); text-decoration:underline; font-family:-apple-system,"Hiragino Sans",system-ui,sans-serif; }
+</style>
+</head>
+<body>
+
+<!-- 1. ホーム -->
+<section class="screen" id="home">
+  <a class="to-kasenbu" href="../">← 下線部</a>
+  <div class="shelf">
+    <div class="shelf-packs">
+      <div>
+        <div class="pack" data-set="list" role="button" tabindex="0" aria-label="初級パック">
+          <div class="pk-in">
+            <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5" fill="#f3eee2" stroke="#c89b3c" stroke-width="1.4"/><g transform="translate(4 4) scale(.8)"><circle cx="20" cy="20" r="15" fill="none" stroke="#d33b2f" stroke-width="3.2"/><rect x="9" y="17.5" width="18" height="5" rx="1" fill="#2a2621"/><rect x="24" y="17.5" width="5" height="5" fill="#e0893a"/><path d="M12 14c0-2 2-2 2-4M15 13c0-2 2-2 2-4" fill="none" stroke="#8c8577" stroke-width="1.2" stroke-linecap="round"/><line x1="9.5" y1="9.5" x2="30.5" y2="30.5" stroke="#d33b2f" stroke-width="3.2" stroke-linecap="round"/></g></svg>
+            <div class="pk-title">Words</div>
+            <div class="pk-sub">初級語・5枚</div>
+          </div>
+          <div class="sheen"></div>
+        </div>
+        <div class="pk-name">初級</div>
+      </div>
+      <div>
+        <div class="pack tr" data-set="tr" role="button" tabindex="0" aria-label="TRパック">
+          <div class="pk-in">
+            <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5" fill="#f3eee2" stroke="#c89b3c" stroke-width="1.4"/><circle cx="20" cy="20" r="15.5" fill="none" stroke="#c89b3c" stroke-width=".6"/><text x="20" y="24.5" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="13" font-weight="600" fill="#22305f">TR</text></svg>
+            <div class="pk-title">TR 100</div>
+            <div class="pk-sub">必修英文100題・5枚</div>
+          </div>
+          <div class="sheen"></div>
+        </div>
+        <div class="pk-name">TR</div>
+      </div>
+    </div>
+    <div class="gauge"><div class="gauge-bar" id="gaugeBar"><i></i></div><div class="gauge-txt" id="gaugeTxt"></div></div>
+  </div>
+  <div class="home-status" id="homeStatus"></div>
+  <div class="home-quiz"><button type="button" class="btn" id="quizListBtn">初級テスト</button><button type="button" class="btn" id="quizTrBtn">TRテスト</button></div>
+  <div class="home-foot"><button type="button" class="link" id="collBtn"></button></div>
+</section>
+
+<!-- 2. 開封 -->
+<section class="screen" id="open">
+  <div class="open-count" id="openCount"></div>
+  <div class="open-word off" id="openWord"></div>
+  <div class="stage" id="openStage"></div>
+  <div class="open-ctl" id="openCtl"></div>
+</section>
+
+<!-- 開封の結果一覧 -->
+<section class="screen" id="result">
+  <h2 class="h2">今回の5枚</h2>
+  <div class="list" id="resultList"></div>
+  <button type="button" class="btn primary" id="resultHome">ホームへ</button>
+</section>
+
+<!-- 3. カード -->
+<section class="screen" id="viewer">
+  <button type="button" class="x" id="viewerClose" aria-label="閉じる">×</button>
+  <div class="v-n" id="viewerN"></div>
+  <div class="v-top">
+    <button type="button" class="v-nav prev" id="viewerPrev" aria-label="前のカード">‹</button>
+    <div class="stage" id="viewerStage"></div>
+    <button type="button" class="v-nav next" id="viewerNext" aria-label="次のカード">›</button>
+  </div>
+  <div class="hint">タップで裏面　／　長押しで語源　／　左右にめくる</div>
+  <button type="button" class="btn v-claim" id="claimBtn">覚えた気がする</button>
+  <div class="v-chat" id="viewerChat" aria-live="polite"></div>
+</section>
+
+<!-- 4. コレクション -->
+<section class="screen" id="collection">
+  <button type="button" class="x" id="collClose" aria-label="閉じる">×</button>
+  <div class="coll-pick" id="collPick">
+    <h2 class="h2">コレクション</h2>
+    <button type="button" class="coll-btn" data-set="list"><b>初級</b><span></span></button>
+    <button type="button" class="coll-btn tr" data-set="tr"><b>TR</b><span></span></button>
+    <div class="save">
+      <button type="button" class="btn" id="exportBtn">書き出し</button>
+      <button type="button" class="btn" id="importBtn">読み込み</button>
+      <button type="button" class="btn" id="forgetKeyBtn">鍵を消す</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+  </div>
+  <div class="coll-view" id="collView" hidden>
+    <h2 class="h2" id="collTitle"></h2>
+    <button type="button" class="btn primary coll-test" id="ctBtn">コレクションテスト</button>
+    <div class="grid" id="grid"></div>
+  </div>
+</section>
+
+<!-- 5. 小テスト -->
+<section class="screen" id="quiz">
+  <button type="button" class="x" id="quizClose" aria-label="やめる">×</button>
+  <div class="q-n" id="qN"></div>
+  <div class="q-dir" id="qDir"></div>
+  <div class="q-word" id="qWord"></div>
+  <div class="q-opts" id="qOpts"></div>
+  <div class="q-plus" id="qPlus">+1 ポイント</div>
+</section>
+<div class="q-show" id="qShow"><div class="stage" id="qShowStage"></div><div class="cap">正解</div></div>
+
+<section class="screen" id="quizEnd">
+  <div class="q-end" id="qEndPts"></div>
+  <div class="q-end-sub" id="qEndSub"></div>
+  <div class="q-got" id="qGot"></div>
+  <button type="button" class="btn primary" id="quizEndHome">ホームへ</button>
+</section>
+
+<!-- コレクションテスト（LINE 風） -->
+<section class="screen" id="ctest">
+  <button type="button" class="x" id="ctClose" aria-label="やめる">×</button>
+  <div class="q-n" id="ctN"></div>
+  <div class="ct-log" id="ctLog" aria-live="polite"></div>
+</section>
+
+<div class="flash" id="flash"></div>
+<section class="psg" id="psg" aria-hidden="true">
+  <div class="psg-head"><b id="psgTitle"></b><button type="button" id="psgClose">カードに戻る</button></div>
+  <div id="psgBody"></div>
+</section>
+<section class="etym" id="etym" aria-hidden="true"></section>
+<dialog class="keydlg" id="keyDlg">
+  <form method="dialog">
+    <h3>Anthropic の API キー</h3>
+    <p>この端末のブラウザにだけ保存します。書き出しのファイルには含めません。消すときはコレクション画面の「鍵を消す」から。</p>
+    <input type="password" id="keyInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…" aria-label="API キー">
+    <div class="row2"><button type="button" class="btn" id="keyCancel">やめる</button><button type="submit" class="btn primary" id="keySave">保存</button></div>
+  </form>
+</dialog>
+
+<script>
+(function(){
+  var CATEGORY={ verb:'動詞', adverb:'副詞・接続語', idiom:'熟語' };
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  /* 例文の focus 語だけ <b> にする（最初の1か所） */
+  function emphasize(en, focus){
+    var i=focus ? en.indexOf(focus) : -1;
+    if(i<0) return esc(en);
+    return esc(en.slice(0,i))+'<b>'+esc(focus)+'</b>'+esc(en.slice(i+focus.length));
+  }
+
+  /* 部品指定 "ball x3" → { kind:'ball', n:3 } */
+  function part(spec){
+    var m=/^(\w+)(?:\s*x(\d+))?$/.exec(spec||'');
+    return m ? { kind:m[1], n:m[2] ? +m[2] : 1 } : { kind:'', n:0 };
+  }
+
+  /* ---- コアイメージ：部品 ---- */
+  var BOX={ x:40, y:20, w:130, h:90 };
+  var INSIDE_SLOTS=[[75,50],[110,80],[75,85]];
+
+  function box(){
+    return '<rect x="'+BOX.x+'" y="'+BOX.y+'" width="'+BOX.w+'" height="'+BOX.h+'" rx="8" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/>';
+  }
+  function balls(n){
+    var s='<g fill="#CECBF6" stroke="#7F77DD" stroke-width="1">';
+    for(var i=0;i<Math.min(n,INSIDE_SLOTS.length);i++) s+='<circle cx="'+INSIDE_SLOTS[i][0]+'" cy="'+INSIDE_SLOTS[i][1]+'" r="12"/>';
+    return s+'</g>';
+  }
+  function label(x, text){
+    return '<text x="'+x+'" y="130" text-anchor="middle" font-size="12" fill="#6c675c">'+esc(text)+'</text>';
+  }
+  function labels(img, x0, x1){
+    var l=img.labels||[];
+    return (l[0] ? label(x0, l[0]) : '')+(l[1] ? label(x1, l[1]) : '');
+  }
+  function arrowDef(uid){
+    return '<defs><marker id="'+uid+'-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+  }
+  function arrow(uid, x1, x2){
+    return '<line class="ar" x1="'+x1+'" y1="65" x2="'+x2+'" y2="65" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#'+uid+'-arrow)"/>';
+  }
+  function mover(cx){
+    return '<circle class="mv" cx="'+cx+'" cy="65" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>';
+  }
+  function rings(cx){
+    return '<g class="gl" fill="none"><circle cx="'+cx+'" cy="65" r="20" stroke="#5DCAA5" stroke-width=".8"/><circle cx="'+cx+'" cy="65" r="28" stroke="#9FE1CB" stroke-width=".8"/></g>';
+  }
+  function lbox(x){
+    return '<rect x="'+x+'" y="40" width="70" height="50" rx="6" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/>';
+  }
+  function ringsAt(cx, cy){
+    return '<g class="gl" fill="none"><circle cx="'+cx+'" cy="'+cy+'" r="20" stroke="#5DCAA5" stroke-width=".8"/><circle cx="'+cx+'" cy="'+cy+'" r="28" stroke="#9FE1CB" stroke-width=".8"/></g>';
+  }
+  function insides(p){
+    var inside=part(p.inside);
+    return inside.kind==='ball' ? balls(inside.n) : '';
+  }
+
+  /* ---- コアイメージ：動きの型 ---- */
+  var MOTIONS={
+    out: {
+      aria:'箱から球が外へ出るコアイメージ',
+      draw: function(img, uid){
+        return arrowDef(uid)+box()+insides(img.parts||{})
+          +arrow(uid, 172, 300)+mover(145)+rings(285)
+          +labels(img, 105, 285);
+      }
+    },
+    /* 外の球が箱の中へ入る。箱の縁が光る */
+    in: {
+      aria:'外の球が箱の中へ入るコアイメージ',
+      draw: function(img, uid){
+        return arrowDef(uid)+box()+insides(img.parts||{})
+          +arrow(uid, 300, 172)+mover(145)
+          +'<g class="gl" fill="none"><rect x="36" y="16" width="138" height="98" rx="10" stroke="#5DCAA5" stroke-width=".8"/><rect x="31" y="11" width="148" height="108" rx="12" stroke="#9FE1CB" stroke-width=".8"/></g>'
+          +labels(img, 105, 285);
+      }
+    },
+    /* 球が進んで壁に当たり、押し返される */
+    block: {
+      aria:'進む球が壁に止められるコアイメージ',
+      draw: function(img, uid){
+        return arrowDef(uid)
+          +arrow(uid, 48, 205)
+          +'<g class="wl"><rect x="230" y="15" width="14" height="100" rx="2" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/>'
+          +'<path d="M230 35L244 25M230 55L244 45M230 75L244 65M230 95L244 85M230 115L244 105" stroke="#b8b09f" stroke-width=".8"/></g>'
+          +'<g class="gl" fill="none" stroke="#5DCAA5" stroke-width="1.2" stroke-linecap="round"><path d="M224 47L216 40M224 83L216 90M222 65L212 65"/></g>'
+          +mover(60)
+          +labels(img, 105, 237);
+      }
+    },
+    /* 左の球から矢印が伸び、指した先が光る */
+    point: {
+      aria:'一点から先の対象を指すコアイメージ',
+      draw: function(img, uid){
+        var t=part((img.parts||{}).target).kind;
+        var target=t==='box'
+          ? '<rect x="258" y="40" width="64" height="50" rx="6" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/><circle cx="290" cy="65" r="9" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          : '<circle cx="290" cy="65" r="13" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>';
+        return arrowDef(uid)
+          +'<circle cx="70" cy="65" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +arrow(uid, 88, (t==='box' ? 250 : 270))
+          +target+rings(290)
+          +labels(img, 70, 290);
+      }
+    },
+    /* 球が進みながら色と大きさを変えていく */
+    change: {
+      aria:'球が進みながら姿を変えるコアイメージ',
+      draw: function(img, uid){
+        return '<line x1="60" y1="65" x2="300" y2="65" stroke="#cfc8b6" stroke-width="1" stroke-dasharray="3 5"/>'
+          +'<circle cx="60" cy="65" r="12" fill="none" stroke="#9FE1CB" stroke-width="1" stroke-dasharray="2 3"/>'
+          +'<circle cx="300" cy="65" r="17" fill="none" stroke="#CECBF6" stroke-width="1" stroke-dasharray="2 3"/>'
+          +'<circle class="mv" cx="60" cy="65" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 60, 300);
+      }
+    },
+    /* 揺れていた球が、くぼみの底に落ち着く */
+    settle: {
+      aria:'揺れる球がくぼみに落ち着くコアイメージ',
+      draw: function(img, uid){
+        return '<path d="M110 80Q190 125 270 80" fill="none" stroke="#9a9384" stroke-width="1.5" stroke-linecap="round"/>'
+          +'<g class="gl" fill="none"><circle cx="190" cy="90.5" r="20" stroke="#5DCAA5" stroke-width=".8"/><circle cx="190" cy="90.5" r="28" stroke="#9FE1CB" stroke-width=".8"/></g>'
+          +'<circle class="mv" cx="190" cy="90.5" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 110, 270);
+      }
+    },
+    /* 球が目標へ向かうが、切れ目で落ちて届かない */
+    short: {
+      aria:'球が目標に届かず途中で落ちるコアイメージ',
+      draw: function(img, uid){
+        return '<path d="M30 80H182M226 80H340" stroke="#9a9384" stroke-width="1.5" stroke-linecap="round"/>'
+          +'<path d="M182 80V96M226 80V96" stroke="#cfc8b6" stroke-width="1" stroke-dasharray="2 3"/>'
+          +'<circle cx="300" cy="68" r="13" fill="none" stroke="#7F77DD" stroke-width="1" stroke-dasharray="3 3"/>'
+          +'<g class="gl" fill="none" stroke="#d9a35b" stroke-width="1.2" stroke-linecap="round"><path d="M196 100L190 108M204 102V111M212 100L218 108"/></g>'
+          +'<circle class="mv" cx="60" cy="68" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 60, 300);
+      }
+    },
+    /* 二つの球の間に線が張られ、小さな球が行き来する */
+    link: {
+      aria:'二つのものの間を線が結ぶコアイメージ',
+      draw: function(img, uid){
+        return '<line class="ar" x1="84" y1="65" x2="286" y2="65" stroke="#1D9E75" stroke-width="1.5"/>'
+          +'<circle cx="70" cy="65" r="13" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<circle cx="300" cy="65" r="13" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          +'<circle class="mv" cx="88" cy="65" r="5" fill="#fff" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 70, 300);
+      }
+    },
+    /* 球が壁に当たり、押し勝って乗り越える */
+    over: {
+      aria:'球が壁を乗り越えるコアイメージ',
+      draw: function(img, uid){
+        return '<path d="M30 115H340" stroke="#cfc8b6" stroke-width="1"/>'
+          +'<g class="wl"><rect x="195" y="55" width="12" height="60" rx="2" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/>'
+          +'<path d="M195 72L207 62M195 89L207 79M195 106L207 96" stroke="#b8b09f" stroke-width=".8"/></g>'
+          +'<g class="gl" fill="none"><circle cx="290" cy="103" r="16" stroke="#5DCAA5" stroke-width=".8"/><circle cx="290" cy="103" r="21" stroke="#9FE1CB" stroke-width=".8"/></g>'
+          +'<circle class="mv" cx="60" cy="103" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 90, 290);
+      }
+    },
+
+    /* ===== 熟語：前置詞の図 ===== */
+    /* at：線の上の一点を矢印が突く */
+    'p-at': {
+      aria:'線の上の一点を指すコアイメージ',
+      draw: function(img, uid){
+        var ticks='';
+        for(var x=60;x<=330;x+=30) ticks+='M'+x+' 91V99';
+        return arrowDef(uid)
+          +'<path d="M30 95H345" stroke="#9a9384" stroke-width="1.5"/><path d="'+ticks+'" stroke="#cfc8b6" stroke-width="1"/>'
+          +ringsAt(230, 95)
+          +'<circle cx="230" cy="95" r="5" fill="#7F77DD"/>'
+          +'<line class="ar" x1="90" y1="25" x2="222" y2="88" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#'+uid+'-arrow)"/>'
+          +labels(img, 90, 230);
+      }
+    },
+    /* in：球が枠の中に収まる */
+    'p-in': {
+      aria:'球が枠の中に収まるコアイメージ',
+      draw: function(img, uid){
+        return '<rect x="205" y="20" width="120" height="90" rx="6" fill="none" stroke="#9a9384" stroke-width="1.5"/>'
+          +'<g class="gl" fill="none"><rect x="200" y="15" width="130" height="100" rx="9" stroke="#5DCAA5" stroke-width=".8"/><rect x="195" y="10" width="140" height="110" rx="12" stroke="#9FE1CB" stroke-width=".8"/></g>'
+          +'<circle class="mv" cx="265" cy="65" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 90, 265);
+      }
+    },
+    /* on：球が面の上に降りて、支えられる */
+    'p-on': {
+      aria:'球が面の上に乗って支えられるコアイメージ',
+      draw: function(img, uid){
+        return '<rect x="70" y="100" width="240" height="6" rx="2" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/>'
+          +'<path d="M110 106L101 118H119ZM270 106L261 118H279Z" fill="#cfc8b6"/>'
+          +'<g class="gl" fill="none" stroke="#5DCAA5" stroke-width="1.2" stroke-linecap="round"><path d="M170 96L162 90M210 96L218 90"/></g>'
+          +'<circle class="mv" cx="190" cy="88" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 110, 270);
+      }
+    },
+    /* to：球が矢印に沿って進み、到達点の旗に届く */
+    'p-to': {
+      aria:'球が到達点に届くコアイメージ',
+      draw: function(img, uid){
+        return arrowDef(uid)
+          +arrow(uid, 78, 284)
+          +'<path d="M300 25V105" stroke="#9a9384" stroke-width="1.5"/><path d="M300 25L322 32L300 39Z" fill="#c89b3c"/>'
+          +rings(300)
+          +mover(60)
+          +labels(img, 60, 300);
+      }
+    },
+    /* from：起点にあった球が離れていく */
+    'p-from': {
+      aria:'起点から球が離れていくコアイメージ',
+      draw: function(img, uid){
+        return '<line x1="128" y1="65" x2="320" y2="65" stroke="#cfc8b6" stroke-width="1" stroke-dasharray="3 5"/>'
+          +'<circle cx="110" cy="65" r="18" fill="none" stroke="#7F77DD" stroke-width="1" stroke-dasharray="3 3"/>'
+          +'<circle class="gl" cx="110" cy="65" r="24" fill="none" stroke="#9FE1CB" stroke-width=".8"/>'
+          +'<circle cx="110" cy="65" r="3" fill="#7F77DD"/>'
+          +mover(110)
+          +labels(img, 110, 290);
+      }
+    },
+    /* with：二つの球が並んで一緒に進む */
+    'p-with': {
+      aria:'二つの球が並んで一緒に進むコアイメージ',
+      draw: function(img, uid){
+        return '<path d="M70 48H300M70 84H300" stroke="#cfc8b6" stroke-width="1" stroke-dasharray="3 5"/>'
+          +'<g class="mv"><line x1="70" y1="58" x2="70" y2="74" stroke="#1D9E75" stroke-width="1.2"/>'
+          +'<circle cx="70" cy="48" r="11" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<circle cx="70" cy="84" r="11" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/></g>'
+          +labels(img, 90, 270);
+      }
+    },
+    /* 天秤：一方に傾いて止まる */
+    scale: {
+      aria:'天秤が一方に傾くコアイメージ',
+      draw: function(img, uid){
+        return '<path d="M190 60L176 112H204Z" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/><path d="M150 112H230" stroke="#9a9384" stroke-width="1.5"/>'
+          +'<g class="bm">'
+          +'<path d="M100 60H280" stroke="#6c675c" stroke-width="2" stroke-linecap="round"/>'
+          +'<path d="M100 60V82M280 60V82" stroke="#9a9384" stroke-width="1"/>'
+          +'<path d="M78 82H122Q100 97 78 82ZM258 82H302Q280 97 258 82Z" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/>'
+          +'<circle cx="100" cy="76" r="6" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<circle cx="280" cy="72" r="10" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          +'<circle cx="190" cy="60" r="3" fill="#6c675c"/></g>'
+          +labels(img, 100, 280);
+      }
+    },
+    /* 時間の線：印が時の流れに沿って進む */
+    time: {
+      aria:'時の流れに沿って印が進むコアイメージ',
+      draw: function(img, uid){
+        var ticks='';
+        for(var x=60;x<=330;x+=30) ticks+='M'+x+' 76V84';
+        return arrowDef(uid)
+          +'<line x1="30" y1="80" x2="345" y2="80" stroke="#9a9384" stroke-width="1.5" marker-end="url(#'+uid+'-arrow)"/>'
+          +'<path d="'+ticks+'" stroke="#cfc8b6" stroke-width="1"/>'
+          +ringsAt(300, 80)
+          +'<g class="mv"><path d="M60 52V80" stroke="#1D9E75" stroke-width="1.5"/><circle cx="60" cy="46" r="8" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/></g>'
+          +labels(img, 60, 300);
+      }
+    },
+
+    /* ===== 副詞・接続語・構文：論理図 ===== */
+    /* flow：箱Aから矢印がまっすぐ箱Bへ伸び、Bが光る */
+    flow: {
+      aria:'AからBへそのまま流れる論理図',
+      draw: function(img, uid){
+        return arrowDef(uid)+lbox(50)+lbox(260)
+          +'<rect class="gl" x="255" y="35" width="80" height="60" rx="9" fill="none" stroke="#5DCAA5" stroke-width="1"/>'
+          +arrow(uid, 125, 252)
+          +labels(img, 85, 295);
+      }
+    },
+    /* against：Aからの矢印が壁を突き抜けてBへ届く */
+    against: {
+      aria:'壁があっても矢印が向こうへ届く論理図',
+      draw: function(img, uid){
+        return arrowDef(uid)+lbox(40)+lbox(270)
+          +'<rect x="180" y="22" width="12" height="86" rx="2" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/>'
+          +'<path d="M180 40L192 30M180 60L192 50M180 80L192 70M180 100L192 90" stroke="#b8b09f" stroke-width=".8"/>'
+          +'<g class="ht" fill="none" stroke="#d9a35b" stroke-width="1.2" stroke-linecap="round"><path d="M178 52L170 45M178 78L170 85M200 52L208 45M200 78L208 85"/></g>'
+          +'<rect class="gl" x="265" y="35" width="80" height="60" rx="9" fill="none" stroke="#5DCAA5" stroke-width="1"/>'
+          +arrow(uid, 115, 262)
+          +labels(img, 75, 305);
+      }
+    },
+    /* add：積み木Aの上に積み木Bが落ちて重なる */
+    add: {
+      aria:'積み木の上にもう一つが重なる論理図',
+      draw: function(img, uid){
+        return '<rect x="150" y="72" width="80" height="38" rx="4" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          +'<rect class="mv" x="150" y="32" width="80" height="38" rx="4" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<path class="gl" d="M252 50H268M260 42V58" stroke="#1D9E75" stroke-width="2" stroke-linecap="round"/>'
+          +labels(img, 100, 280);
+      }
+    },
+    /* contrast：中央の線を境に、左右の箱が交互に光る */
+    contrast: {
+      aria:'境目の両側に二つが分かれる論理図',
+      draw: function(img, uid){
+        return '<path d="M190 15V115" stroke="#9a9384" stroke-width="1" stroke-dasharray="4 4"/>'
+          +'<rect x="60" y="40" width="90" height="50" rx="6" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/>'
+          +'<rect x="230" y="40" width="90" height="50" rx="6" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/>'
+          +'<rect class="ga" x="60" y="40" width="90" height="50" rx="6" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<rect class="gb" x="230" y="40" width="90" height="50" rx="6" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          +labels(img, 105, 275);
+      }
+    },
+    /* branch：道が二股に分かれ、壁のない方へ球が進む */
+    branch: {
+      aria:'分かれ道の片方を選ぶ論理図',
+      draw: function(img, uid){
+        return '<path d="M40 65H170L320 30M170 65L320 100" fill="none" stroke="#9a9384" stroke-width="1.5" stroke-linejoin="round"/>'
+          +'<rect x="244" y="34" width="10" height="26" rx="2" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/>'
+          +'<circle class="gl" cx="305" cy="96" r="18" fill="none" stroke="#5DCAA5" stroke-width=".8"/>'
+          +'<circle class="mv" cx="40" cy="65" r="11" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +labels(img, 80, 300);
+      }
+    },
+    /* gate：閉じた門の前で球が待ち、門が開くと通る */
+    gate: {
+      aria:'門が開いたときだけ通れる論理図',
+      draw: function(img, uid){
+        return '<path d="M30 80H345" stroke="#9a9384" stroke-width="1.5"/>'
+          +'<rect x="196" y="40" width="8" height="40" rx="2" fill="#e3dccb" stroke="#9a9384" stroke-width="1"/>'
+          +ringsAt(300, 68)
+          +'<circle class="mv" cx="60" cy="68" r="12" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<line class="arm" x1="204" y1="60" x2="262" y2="60" stroke="#c89b3c" stroke-width="4" stroke-linecap="round"/>'
+          +labels(img, 100, 290);
+      }
+    },
+    /* equal：AとBの間に「＝」が現れ、Bが同じ色になる */
+    equal: {
+      aria:'AとBが等しく結ばれる論理図',
+      draw: function(img, uid){
+        return '<circle cx="100" cy="65" r="16" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1"/>'
+          +'<circle class="mv" cx="280" cy="65" r="16" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          +'<path class="gl" d="M172 58H208M172 72H208" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round"/>'
+          +labels(img, 100, 280);
+      }
+    },
+    /* gauge：メーターの針が parts.level（0〜1）まで振れる */
+    gauge: {
+      aria:'メーターの針で程度を示すコアイメージ',
+      draw: function(img, uid){
+        var lv=Math.max(0, Math.min(1, +((img.parts||{}).level)||0));
+        var th=Math.PI*(1-lv), ex=(190+70*Math.cos(th)).toFixed(1), ey=(108-70*Math.sin(th)).toFixed(1);
+        var ticks='';
+        for(var i=0;i<=4;i++){ var t=Math.PI*(1-i/4); ticks+='M'+(190+62*Math.cos(t)).toFixed(1)+' '+(108-62*Math.sin(t)).toFixed(1)+'L'+(190+70*Math.cos(t)).toFixed(1)+' '+(108-70*Math.sin(t)).toFixed(1); }
+        return '<path d="M120 108A70 70 0 0 1 260 108" fill="none" stroke="#cfc8b6" stroke-width="6" stroke-linecap="round"/>'
+          +(lv>0 ? '<path class="gl" d="M120 108A70 70 0 0 1 '+ex+' '+ey+'" fill="none" stroke="#5DCAA5" stroke-width="6" stroke-linecap="round"/>' : '')
+          +'<path d="'+ticks+'" stroke="#9a9384" stroke-width="1"/>'
+          +'<line class="mv" style="--a:'+(180*lv).toFixed(1)+'deg" x1="190" y1="108" x2="132" y2="108" stroke="#1d1b16" stroke-width="2" stroke-linecap="round"/>'
+          +'<circle cx="190" cy="108" r="5" fill="#6c675c"/>'
+          +labels(img, 120, 260);
+      }
+    },
+    /* thing：もの・人。枠の中に名前の札が浮かび、ゆっくり光る。札の文字は labels[0]、下の説明は labels[1] */
+    thing: {
+      aria:'枠の中に名前の札が浮かぶコアイメージ',
+      draw: function(img, uid){
+        var l=img.labels||[], name=l[0]||'', w=Math.max(80, 14*name.length+28), x=(190-w/2).toFixed(1);
+        return '<rect x="110" y="14" width="160" height="96" rx="10" fill="#eee9dc" stroke="#9a9384" stroke-width="1"/>'
+          +'<path d="M110 30V14H126M254 14H270V30M270 94V110H254M126 110H110V94" fill="none" stroke="#c89b3c" stroke-width="2" stroke-linecap="round"/>'
+          +'<rect class="gl" x="104" y="8" width="172" height="108" rx="13" fill="none" stroke="#5DCAA5" stroke-width="1"/>'
+          +'<g class="tg"><rect x="'+x+'" y="44" width="'+w+'" height="34" rx="6" fill="#f8f4ea" stroke="#1D9E75" stroke-width="1.2"/>'
+          +'<circle cx="'+(190-w/2+10).toFixed(1)+'" cy="61" r="2.5" fill="#c89b3c"/>'
+          +'<text x="190" y="66" text-anchor="middle" font-size="14" font-weight="600" fill="#0f5f4b">'+esc(name)+'</text></g>'
+          +(l[1] ? label(190, l[1]) : '');
+      }
+    },
+    /* clarity：霧の向こうの球が parts.level（0〜1）まで見えてくる */
+    clarity: {
+      aria:'霧が晴れて見えてくるコアイメージ',
+      draw: function(img, uid){
+        var lv=Math.max(0, Math.min(1, +((img.parts||{}).level)||0));
+        return '<defs><filter id="'+uid+'-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter></defs>'
+          +'<ellipse cx="50" cy="62" rx="13" ry="8" fill="none" stroke="#6c675c" stroke-width="1.2"/><circle cx="50" cy="62" r="3.5" fill="#6c675c"/>'
+          +'<line x1="70" y1="62" x2="196" y2="62" stroke="#cfc8b6" stroke-width="1" stroke-dasharray="3 5"/>'
+          +'<circle cx="230" cy="62" r="17" fill="#CECBF6" stroke="#7F77DD" stroke-width="1"/>'
+          +'<g class="fog" style="--f:'+((1-lv)*0.97).toFixed(2)+'" filter="url(#'+uid+'-blur)" fill="#f8f4ea">'
+          +'<ellipse cx="230" cy="62" rx="46" ry="36"/><ellipse cx="215" cy="70" rx="30" ry="22"/><ellipse cx="248" cy="55" rx="28" ry="20"/></g>'
+          +labels(img, 50, 230);
+      }
+    }
+  };
+
+  function figure(img, uid){
+    var m=img && MOTIONS[img.motion];
+    if(!m) return '';
+    return '<svg class="fig m-'+esc(img.motion)+'" viewBox="0 0 380 140" role="img" aria-label="'+m.aria+'">'+m.draw(img, uid)+'</svg>';
+  }
+
+  /* ---- 裏面 ---- */
+  function back(uid){
+    var ns=uid+'-ns';
+    return '<svg viewBox="0 0 300 419" xmlns="http://www.w3.org/2000/svg">'
+      +'<defs>'
+      +'<symbol id="'+ns+'" viewBox="0 0 40 40">'
+      +'<circle cx="20" cy="20" r="15" fill="none" stroke="#d33b2f" stroke-width="3.2"/>'
+      +'<rect x="9" y="17.5" width="18" height="5" rx="1" fill="#2a2621"/>'
+      +'<rect x="24" y="17.5" width="5" height="5" fill="#e0893a"/>'
+      +'<path d="M12 14c0-2 2-2 2-4M15 13c0-2 2-2 2-4" fill="none" stroke="#8c8577" stroke-width="1.2" stroke-linecap="round"/>'
+      +'<line x1="9.5" y1="9.5" x2="30.5" y2="30.5" stroke="#d33b2f" stroke-width="3.2" stroke-linecap="round"/>'
+      +'</symbol>'
+      +'<pattern id="'+uid+'-tile" width="50" height="58" patternUnits="userSpaceOnUse"><use href="#'+ns+'" x="5" y="2" width="40" height="40" opacity=".92"/></pattern>'
+      +'<pattern id="'+uid+'-tile2" width="50" height="58" patternUnits="userSpaceOnUse" x="25" y="29"><use href="#'+ns+'" x="5" y="2" width="40" height="40" opacity=".35"/></pattern>'
+      +'</defs>'
+      +'<rect width="300" height="419" fill="#f3eee2"/>'
+      +'<rect width="300" height="419" fill="url(#'+uid+'-tile2)"/>'
+      +'<rect width="300" height="419" fill="url(#'+uid+'-tile)"/>'
+      +'<circle cx="150" cy="209" r="58" fill="#f3eee2" stroke="#c89b3c" stroke-width="2"/>'
+      +'<circle cx="150" cy="209" r="52" fill="none" stroke="#c89b3c" stroke-width=".8"/>'
+      +'<use href="#'+ns+'" x="110" y="169" width="80" height="80"/>'
+      +'</svg>';
+  }
+
+  /* ---- カード（表・裏） ---- */
+  var seq=0;
+  /* 出自バッジ（TR 番号）と誤読。met は origin から、tr は tr から */
+  function srcTr(c){
+    if(c.tr) return c.tr;
+    var t=(c.origin||[]).map(function(o){ return o.tr; }).filter(Boolean);
+    return t[0]||'';
+  }
+  function misreads(c){
+    var out=[];
+    (c.origin||[]).forEach(function(o){ if(o.misread && out.indexOf(o.misread)<0) out.push(o.misread); });
+    return out;
+  }
+  function sizeClass(w){ return w.length>14 ? ' class="xl"' : w.length>9 ? ' class="l"' : ''; }
+  function cardHTML(c, kira){
+    var uid='c'+(++seq)+'-'+c.id.replace(/[^\w-]/g,'_');
+    var pills=(c.senses||[]).map(function(s){ return '<span>'+esc(s)+'</span>'; }).join('')
+      +(c.senses_noun||[]).map(function(s){ return '<span class="n">名：'+esc(s)+'</span>'; }).join('')
+      +misreads(c).map(function(m){ return '<span class="mis">誤読：'+esc(m)+'</span>'; }).join('');
+    var badge=srcTr(c);
+    var ex=(c.examples||[]).map(function(e){
+      return '<p>'+emphasize(e.en, e.focus)+'<small>'+esc(e.ja)+'</small></p>';
+    }).join('');
+    return ''
+      +'<div class="card'+(kira ? ' kira' : '')+'" role="button" tabindex="0" aria-label="'+esc(c.word)+' のカード。タップで裏返す、長押しで語源">'
+      +  '<div class="face front">'
+      +    '<div class="word"><b'+sizeClass(c.word)+'>'+esc(c.word)+'</b>'+(badge ? '<span class="badge">'+esc(badge)+'</span>' : '<span>'+esc(c.pos)+'</span>')+'</div>'
+      +    (c.ipa||c.kana ? '<div class="pron"><code>'+esc(c.ipa||'')+'</code><span>'+esc(c.kana||'')+'</span></div>' : '')
+      +    figure(c.image, uid)
+      +    '<div class="pills">'+pills+'</div>'
+      +    (c.core ? '<div class="core">'+esc(c.core)+'</div>' : '')
+      +    (ex ? '<div class="ex">'+ex+'</div>' : '')
+      +    '<div class="foot"><span>'+(c.set==='met' ? '出会った語' : c.set==='tr' ? '必修英文100題' : '初級語　'+esc(CATEGORY[c.category]||''))+'</span><i>'+(kira ? '◆◆◆' : '◇◇◇')+'</i></div>'
+      +    (kira ? '<div class="holo"></div>' : '')
+      +    '<div class="sheen"></div>'
+      +  '</div>'
+      +  '<div class="face back" aria-hidden="true">'+back(uid)+'</div>'
+      +  '<div class="sparks"></div>'
+      +'</div>';
+  }
+
+  /* カードのない語（小テスト用）：語と訳語だけ */
+  function simpleHTML(w){
+    return '<div class="card simple"><div class="face front">'
+      +'<div class="word"><b>'+esc(w.word)+'</b><span>'+esc(CATEGORY[w.category]||'')+'</span></div>'
+      +'<div class="mean">'+esc(w.meaning)+'</div>'
+      +'<div class="foot"><span>初級語　'+esc(CATEGORY[w.category]||'')+'</span><i>◇◇◇</i></div>'
+      +'</div></div>';
+  }
+
+  /* ---- 語源面 ---- */
+  /* 一文の中の語を太字にする（注記の括弧・A/B・... を外し、大文字小文字を問わず最初の一か所） */
+  function boldIn(sent, word){
+    var key=word.replace(/（.*?）/g,'').split(/\s*\.\.\.\s*|\s+[AB](?=\s|$)/)[0].trim();
+    var i=key ? sent.toLowerCase().indexOf(key.toLowerCase()) : -1;
+    if(i<0) return esc(sent);
+    return esc(sent.slice(0,i))+'<b>'+esc(sent.slice(i,i+key.length))+'</b>'+esc(sent.slice(i+key.length));
+  }
+  function chatBoxHTML(){
+    return '<div class="chat'+(apiKey() ? '' : ' nokey')+'"><div class="chat-log" aria-live="polite"></div>'
+      +'<div class="chat-tools" hidden><button type="button" class="chat-clear">この会話を消す</button></div>'
+      +'<div class="chat-etym"><button type="button" class="chat-go" data-q="この語の語源を教えてください">語源を聞く</button></div>'
+      +'<form><input type="text" maxlength="200" enterkeyhint="send" placeholder="KANTAくんとして先生に聞く" aria-label="Claude先生に聞く"><button type="submit">送信</button></form></div>';
+  }
+  /* 長押し面（E-origin）：1 出会った一文（語を太字） 2 確認済みの語源だけ 3 Claude に聞く欄。出自のない語は 2 から */
+  function etymHTML(c){
+    var os=(c.origin||[]).filter(function(o){ return o.sentence; });
+    if(!os.length && c.sentence) os=[{ tr:c.tr, sentence:c.sentence }];
+    var trs=(c.origin||[]).map(function(o){ return o.tr; }).filter(Boolean);
+    if(!trs.length && c.tr) trs=[c.tr];
+    trs=trs.filter(function(t,i){ return trs.indexOf(t)===i; });
+    var et=c.etymology||{};
+    return '<h1'+(c.word.length>10 ? ' class="l"' : '')+'>'+esc(c.word)+'</h1>'
+      +(trs.length ? '<p class="old trs">'+trs.map(function(t){ return '<button type="button" class="trbtn" data-tr="'+esc(t)+'">'+esc(t)+'　全文 ›</button>'; }).join('')+'</p>' : (c.set==='met' ? '<p class="old">出会った語</p>' : ''))
+      +os.map(function(o){ return '<p class="sent">'+boldIn(o.sentence, c.word)+'</p>'; }).join('')
+      +(et.verified ? (et.origin ? '<p class="old">'+esc(et.origin)+'</p>' : '')+(et.paragraphs||[]).map(function(p){ return '<p>'+esc(p)+'</p>'; }).join('') : '')
+      +chatBoxHTML()
+      +'<div class="src"><span></span><button type="button" class="close">カードに戻る</button></div>';
+  }
+
+  /* =====================================================
+     Claude を直接呼ぶ（B-live）。鍵はこの端末の localStorage にだけ置く
+     ===================================================== */
+  var APIKEY='eigo:apikey', MODEL='claude-sonnet-5-5';
+  function apiKey(){ try{ return localStorage.getItem(APIKEY)||''; }catch(e){ return ''; } }
+  function online(){ return navigator.onLine !== false; }
+
+  /* 鍵の入力。保存できたら true で resolve */
+  function askKey(){
+    var dlg=document.getElementById('keyDlg'), input=document.getElementById('keyInput');
+    input.value='';
+    return new Promise(function(resolve){
+      function onClose(){
+        dlg.removeEventListener('close', onClose);
+        var k=dlg.returnValue==='save' ? input.value.trim() : '';
+        input.value='';
+        if(k){ try{ localStorage.setItem(APIKEY, k); }catch(e){} }
+        resolve(!!(k && apiKey()));
+      }
+      dlg.returnValue='';
+      dlg.addEventListener('close', onClose);
+      dlg.showModal();
+      input.focus();
+    });
+  }
+  document.getElementById('keySave').addEventListener('click', function(e){ e.preventDefault(); document.getElementById('keyDlg').close('save'); });
+  document.getElementById('keyCancel').addEventListener('click', function(){ document.getElementById('keyDlg').close(''); });
+
+  /* =====================================================
+     Claude先生に聞く（LINE 風）。右があなた＝KANTAくん、左が Claude先生。
+     先生は会話の流れを踏まえて答える。会話は語ごとに残す（eigo:chats）。書き出しに含め、読み込みで戻す。
+     話し方の手本は bunka-cards の掛け合い（sensei-samples.json、原文のまま）
+     ===================================================== */
+  var SAMPLES={};
+  var SENSEI='あなたは「Claude先生」。『必修英文100題』などで英文読解を学ぶ「KANTAくん」の質問に、LINE のチャットで答える。\n'
+    +'KANTAくんは英単語を字面で誤解したり、カタカナ語や身近な例に引き寄せたり、ちょっとボケたりする。\n'
+    +'答え方：\n'
+    +'・まず誤解があれば、やさしく正す（「〜ではありません」「逆です」）。\n'
+    +'・すぐ核心を短く言う。2〜3文、全体で150字以内（語源を聞かれたときは200字以内でよい）。です・ます調。前置きや見出し、箇条書き、記号での強調は使わない。\n'
+    +'・語源や短い例文、似た語との使い分けを一つ添えると覚えやすい。ボケには軽く乗ってから論点に戻す。\n'
+    +'・下の語カードの内容を前提にする。出会った一文があれば、その文脈に沿って答える。カードにない事実は確かなものだけを述べ、不確かなときはそう言う。\n'
+    +'・KANTAくんの誤読の記録があれば、なぜそう読み違えやすいかにも触れてよい。\n';
+  function sampleDialogs(){
+    return Object.keys(SAMPLES).slice(0, 2).map(function(id){
+      return '（'+id+'）\n'+SAMPLES[id].map(function(m){ return (m.who==='k' ? 'KANTAくん：' : 'Claude先生：')+m.text; }).join('\n');
+    }).join('\n\n');
+  }
+  /* 語カードの内容をそのまま渡す：語・意味・出会った一文・誤読 */
+  function cardContext(c){
+    var os=(c.origin||[]).filter(function(o){ return o.sentence; }).map(function(o){ return (o.tr ? o.tr+'：' : '')+o.sentence; });
+    if(!os.length && c.sentence) os=[(c.tr ? c.tr+'：' : '')+c.sentence];
+    var mis=misreads(c);
+    return '語：'+c.word+'\n'
+      +'意味：'+(c.senses||[]).concat((c.senses_noun||[]).map(function(n){ return '（名）'+n; })).join('／')+'\n'
+      +(os.length ? '出会った一文：\n'+os.join('\n')+'\n' : '')
+      +(mis.length ? 'KANTAくんの誤読：'+mis.join('、')+'\n' : '');
+  }
+  function bubble(who, text, extra){ return bubbleHTML(who, esc(text), extra); }
+  function bubbleHTML(who, html, extra, pcls){
+    return '<div class="msg '+who+(extra ? ' '+extra : '')+'"><span class="av" aria-hidden="true">'+(who==='k' ? 'K' : '先')+'</span>'
+      +'<div class="bub"><span class="who">'+(who==='k' ? 'KANTAくん' : 'Claude先生')+'</span><p'+(pcls ? ' class="'+pcls+'"' : '')+'>'+html+'</p></div></div>';
+  }
+  var CHATS='eigo:chats', CHAT_KEEP=200, CHAT_SEND=16;
+  function loadChats(){ try{ var o=JSON.parse(localStorage.getItem(CHATS)); return o && typeof o==='object' && !Array.isArray(o) ? o : {}; }catch(e){ return {}; } }
+  function saveChats(o){ try{ localStorage.setItem(CHATS, JSON.stringify(o)); }catch(e){} }
+  /* 直近 CHAT_SEND 件を送る。会話は必ず KANTAくん（user）から始まる決まりなので、先頭が先生なら1件落とす。
+     送り直すたびに同じになる部分（新しい質問の1つ前まで）にキャッシュの印を付ける */
+  function chatPayload(msgs){
+    var m=msgs.slice(-CHAT_SEND);
+    if(m.length && m[0].role!=='user') m=m.slice(1);
+    return m.map(function(x, i){
+      return i===m.length-2 ? { role:x.role, content:[{ type:'text', text:x.content, cache_control:{ type:'ephemeral' } }] } : { role:x.role, content:x.content };
+    });
+  }
+
+  function callClaude(system, user){
+    return fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{
+        'x-api-key':apiKey(),
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true',
+        'content-type':'application/json'
+      },
+      /* Sonnet 5.5 は指定しないと思考してから答え、その分も max_tokens に数えられて本文が途中で切れる。
+         ツールを使わないので between_tools で思考を止め、800 を本文に回す（bunka-cards と同じ） */
+      body:JSON.stringify({ model:MODEL, max_tokens:800, thinking:{ type:'between_tools' }, system:system, messages:Array.isArray(user) ? user : [{ role:'user', content:user }] })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){
+        if(!r.ok){ var err=new Error((d.error && d.error.message) || ('HTTP '+r.status)); err.status=r.status; throw err; }
+        if(d.stop_reason==='refusal'){ var rf=new Error('この質問には答えられませんでした'); rf.status='refusal'; throw rf; }
+        var text=(d.content||[]).filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('').trim();
+        if(d.stop_reason==='max_tokens') text+=' …（長さの上限で途中で切れました）';
+        return text;
+      });
+    });
+  }
+
+  /* 圏外のときは送信ボタンを灰色にして「圏外」と出す。カード・開封・小テストは影響なし */
+  function renderNet(){
+    var off=!online();
+    document.querySelectorAll('.chat').forEach(function(box){
+      var busy=!!box.dataset.busy;
+      box.querySelector('form button').disabled=off || busy; box.querySelector('form button').textContent=off ? '圏外' : '送信';
+      box.querySelector('.chat-go').disabled=off || busy; box.querySelector('.chat-go').textContent=off ? '語源を聞く　圏外' : '語源を聞く';
+      box.classList.toggle('nokey', off || !apiKey());
+    });
+  }
+  window.addEventListener('online', renderNet);
+  window.addEventListener('offline', renderNet);
+
+  function bindChat(box, c){
+    var form=box.querySelector('form'), input=box.querySelector('input'), btn=form.querySelector('button'), log=box.querySelector('.chat-log');
+    var tools=box.querySelector('.chat-tools'), saved=loadChats()[c.id]||[], msgs, busy=false;
+    function render(){
+      /* 定型のやりとり（覚えた気がする）は表示だけ。先生が言っていないセリフなので API には送らない */
+      msgs=saved.filter(function(m){ return !m.canned; }).map(function(m){ return { role:m.role, content:m.content }; });
+      log.innerHTML=saved.map(function(m){ return bubble(m.role==='user' ? 'k' : 't', m.content); }).join('');
+      tools.hidden=!saved.length;
+    }
+    render();
+    box.querySelector('.chat-clear').addEventListener('click', function(){
+      if(busy || !confirm('《'+c.word+'》の会話を消します')) return;
+      var all=loadChats(); delete all[c.id]; saveChats(all);
+      saved=[]; render();
+    });
+    function add(html){
+      log.insertAdjacentHTML('beforeend', html);
+      var last=log.lastElementChild; if(last && last.scrollIntoView) last.scrollIntoView({ block:'nearest', behavior:'smooth' });
+      return last;
+    }
+    function send(q){
+      if(busy || !online() || !q) return;
+      (apiKey() ? Promise.resolve(true) : askKey()).then(function(ok){
+        box.classList.toggle('nokey', !apiKey());
+        if(!ok) return;
+        input.value='';
+        add(bubble('k', q, 'new'));
+        msgs.push({ role:'user', content:q });
+        busy=true; box.dataset.busy='1'; renderNet();
+        var typing=add(bubble('t', '…', 'typing'));
+        /* 変わらない部分（先生の決まり＋話し方の手本）を先に置き、キャッシュの印を付ける。語ごとに変わる語カードはその後ろ */
+        var system=[{ type:'text', text:SENSEI+'\n【話し方の手本（別の分野の掛け合い）】\n'+sampleDialogs(), cache_control:{ type:'ephemeral' } },
+                    { type:'text', text:'\n【語カード】\n'+cardContext(c) }];
+        callClaude(system, chatPayload(msgs)).then(function(text){
+          typing.remove();
+          text=text || '（答えが空でした）';
+          msgs.push({ role:'assistant', content:text });
+          add(bubble('t', text, 'new'));
+          /* 答えが返った問いと答えの組だけ残す */
+          var now=Date.now(), all=loadChats();
+          saved=saved.concat([{ role:'user', content:q, at:now }, { role:'assistant', content:text, at:now }]).slice(-CHAT_KEEP);
+          all[c.id]=saved; saveChats(all);
+          tools.hidden=false;
+        }, function(err){
+          typing.remove();
+          msgs.pop();   /* 答えられなかった質問は会話に残さない（次に送るときの順番が崩れないように） */
+          add(bubble('t', err.status==='refusal' ? err.message : err.status===401 ? '鍵が正しくないようです。コレクション画面の「鍵を消す」から入れ直してください。'
+            : err.status ? 'うまく答えられませんでした（'+err.status+'：'+err.message+'）' : '通信できませんでした。もう一度送ってください', 'err'));
+        }).then(function(){ busy=false; delete box.dataset.busy; renderNet(); });
+      });
+    }
+    box.querySelector('.chat-go').addEventListener('click', function(){ send(this.dataset.q); });
+    form.addEventListener('submit', function(e){ e.preventDefault(); send(input.value.trim()); });
+    renderNet();
+  }
+
+  /* =====================================================
+     TR の全文。本文・模範和訳・SVO は公開しないファイル（必修英文100題_本文データ.json）を
+     コレクション画面の「読み込み」で一度取り込み、この端末の localStorage にだけ置く。
+     書いた和訳は TR ごとに残し（eigo:mytr）、書き出しに含める
+     ===================================================== */
+  var PSG_KEY='eigo:passages', MYTR_KEY='eigo:mytr';
+  function loadPassages(){ try{ var o=JSON.parse(localStorage.getItem(PSG_KEY)); return o && Array.isArray(o.passages) ? o : null; }catch(e){ return null; } }
+  function loadMyTr(){ try{ var o=JSON.parse(localStorage.getItem(MYTR_KEY)); return o && typeof o==='object' && !Array.isArray(o) ? o : {}; }catch(e){ return {}; } }
+  function saveMyTr(o){ try{ localStorage.setItem(MYTR_KEY, JSON.stringify(o)); }catch(e){} }
+
+  /* SVO の記法：[ ] ( ) < > でまとまり、_ … _ で動詞の下線、語^S で語の下に記号（かっこの直後ならかっこの下）。\( \) は本文の丸かっこ。
+     説明（S=主語 など）は各題で最初に出たときだけ付ける */
+  var SVO_NAME={ S:'主語', V:'動詞', O:'目的語', C:'補語', M:'修飾', A:'名詞の説明' };
+  function renderSVO(src, seen){
+    var out='', word='', i=0, under=false, OPEN={ '[':'n', '(':'a', '<':'m' }, CLOSE={ ']':'n', ')':'a', '>':'m' };
+    function flush(){ if(word){ out+=esc(word); word=''; } }
+    while(i<src.length){
+      var ch=src[i];
+      if(ch==='\\' && (src[i+1]==='(' || src[i+1]===')')){ word+=src[i+1]; i+=2; continue; }
+      if(OPEN[ch] || CLOSE[ch]){ flush(); out+='<span class="bk '+(OPEN[ch]||CLOSE[ch])+(OPEN[ch] ? ' o' : ' c')+'" data-c="'+esc(ch)+'"></span>'; i++; continue; }
+      if(ch==='_'){ flush(); out+= under ? '</span>' : '<span class="u">'; under=!under; i++; continue; }
+      if(ch==='^'){
+        var m=/^\^([SVOCMA]['’]?)/.exec(src.slice(i));
+        if(!m){ word+=ch; i++; continue; }
+        var lab=m[1], cls=lab[0]+(lab.length>1 ? ' sub' : ''), mark=(lab[0]==='A' ? '形' : lab[0])+lab.slice(1);
+        var text=seen[lab[0]] ? mark : mark+'='+SVO_NAME[lab[0]];
+        if(!seen[lab[0]]){ seen[lab[0]]=1; cls+=' long'; }
+        if(!word && /<span class="bk [nam] [oc]" data-c="[^"]*"><\/span>$/.test(out)){
+          out=out.replace(/(<span class="bk [nam] [oc]" data-c="[^"]*"><\/span>)$/, '<span class="w">$1<span class="lb '+cls+'">'+esc(text)+'</span></span>');
+          i+=m[0].length; if(src[i]===' ') i++; continue;
+        }
+        var k=word.lastIndexOf(' ')+1, head=word.slice(0,k), w=word.slice(k);
+        out+=esc(head)+'<span class="w">'+esc(w)+'<span class="lb '+cls+'">'+esc(text)+'</span></span>'; word='';
+        i+=m[0].length; continue;
+      }
+      if(ch===' '){ flush(); out+=' '; i++; continue; }
+      word+=ch; i++;
+    }
+    flush(); if(under) out+='</span>';
+    return out;
+  }
+  /* 間に文字のないかっこの並びに、外側ほど大きいずらし量（--k）を付ける */
+  function spaceBrackets(root){
+    var w=document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT, null), run=[], n;
+    function end(){
+      var opens=run.filter(function(b){ return b.classList.contains('o'); }), closes=run.filter(function(b){ return b.classList.contains('c'); });
+      opens.forEach(function(b, i){ b.style.setProperty('--k', opens.length-1-i); });
+      closes.forEach(function(b, i){ b.style.setProperty('--k', i); });
+      run=[];
+    }
+    while((n=w.nextNode())){
+      if(n.nodeType===1 && n.classList.contains('bk')) run.push(n);
+      else if(n.nodeType===3 && n.nodeValue.length && !(n.parentNode.classList && n.parentNode.classList.contains('lb'))) end();
+    }
+    end();
+  }
+  /* 記号どうしが同じ行で重なったら、後ろの記号を右へずらす */
+  function unclash(root){
+    root.querySelectorAll('.lb').forEach(function(lb){ lb.style.marginLeft=''; });
+    var prev=null, edge=root.getBoundingClientRect().right;
+    root.querySelectorAll('.lb').forEach(function(lb){
+      var r=lb.getBoundingClientRect(), d=0;
+      if(prev && Math.abs(r.top-prev.top)<4 && r.left<prev.right+6) d=prev.right+6-r.left;
+      /* 右端からはみ出す記号は内側へ戻す */
+      if(r.right+d>edge) d=edge-r.right;
+      if(d){ lb.style.marginLeft=d+'px'; r=lb.getBoundingClientRect(); }
+      prev=r;
+    });
+  }
+
+  var psg=document.getElementById('psg'), psgBody=document.getElementById('psgBody'), psgTimer=0;
+  function openPassage(tr){
+    var pk=loadPassages(), p=pk && pk.passages.filter(function(x){ return x.tr===tr; })[0];
+    document.getElementById('psgTitle').textContent=tr;
+    if(!p){
+      psgBody.innerHTML='<p class="psg-empty">本文がまだこの端末に入っていません。<br>iCloud Drive の eigo-words フォルダにある「必修英文100題_本文データ.json」を、コレクション画面の「読み込み」から一度読み込んでください。</p>';
+    }else{
+      var seen={}, mine=(loadMyTr()[tr]||{}).text||'';
+      psgBody.innerHTML='<div class="psg-tools"><button type="button" class="psg-svo-btn">SVO で分ける</button></div>'
+        +'<p class="psg-legend"><b style="color:var(--n)">[ ]</b> 名詞のまとまり　<b style="color:var(--a)">( )</b> 名詞の説明　<b style="color:var(--m)">&lt; &gt;</b> 副詞のまとまり　下線は動詞</p>'
+        +'<div class="psg-flow svo">'+((p.svo||[]).length ? p.svo.map(function(m){ return renderSVO(m, seen); }).join(' ') : esc(p.text))+'</div>'
+        +'<h3>和訳</h3><textarea class="psg-my" placeholder="ここに和訳を書く" aria-label="'+esc(tr)+' の和訳">'+esc(mine)+'</textarea><div class="psg-saved"></div>'
+        +'<button type="button" class="psg-model-btn">模範解答を見る</button>'
+        +'<div class="psg-model-text" hidden><p style="margin:0">'+esc(p.translation||'')+'</p><p class="psg-note">模範解答は Claude が作った下書きです。</p></div>'
+        +'<h3>先生に見てもらう</h3><div class="psg-review"><button type="button" class="psg-review-btn">先生に見てもらう</button>'
+        +'<p class="psg-note">書いた和訳を Claude先生が読んで、誤訳・訳抜け・構文の取り違えを指摘します（点数は付けません）。</p>'
+        +'<div class="psg-reviews"></div></div>';
+      var svoBtn=psgBody.querySelector('.psg-svo-btn'), flow=psgBody.querySelector('.psg-flow'), legend=psgBody.querySelector('.psg-legend');
+      spaceBrackets(flow);
+      svoBtn.addEventListener('click', function(){
+        var on=!flow.classList.contains('on');
+        flow.classList.toggle('on', on); legend.classList.toggle('on', on);
+        svoBtn.classList.toggle('on', on); svoBtn.textContent=on ? '元の英文に戻す' : 'SVO で分ける';
+        if(on) requestAnimationFrame(function(){ unclash(flow); });
+      });
+      var modelBtn=psgBody.querySelector('.psg-model-btn'), model=psgBody.querySelector('.psg-model-text');
+      modelBtn.addEventListener('click', function(){
+        model.hidden=!model.hidden; modelBtn.classList.toggle('on', !model.hidden);
+        modelBtn.textContent=model.hidden ? '模範解答を見る' : '模範解答を隠す';
+      });
+      var ta=psgBody.querySelector('.psg-my'), saved=psgBody.querySelector('.psg-saved');
+      bindReview(psgBody, tr, p, ta);
+      ta.addEventListener('input', function(){
+        clearTimeout(psgTimer); saved.textContent='';
+        psgTimer=setTimeout(function(){
+          var all=loadMyTr(), ent=all[tr]||{};
+          ent.text=ta.value; ent.at=Date.now();
+          if(!ta.value.trim() && !(ent.reviews||[]).length) delete all[tr]; else all[tr]=ent;
+          saveMyTr(all); saved.textContent='保存しました';
+        }, 600);
+      });
+    }
+    psg.scrollTop=0; psg.classList.add('on'); psg.setAttribute('aria-hidden','false');
+    document.getElementById('psgClose').focus({ preventScroll:true });
+  }
+  /* 和訳を先生に見てもらう。英文・SVO 分解・模範和訳（下書き）を先生に渡し、指摘だけを返してもらう。
+     結果は TR ごとに和訳と一緒に残す（eigo:mytr の reviews、最大30件）。書き出しに含まれる */
+  var REVIEW='あなたは「Claude先生」。『必修英文100題』で英文読解を学ぶ「KANTAくん」が書いた和訳を読み、指摘だけを返す。点数や合否は付けない。\n'
+    +'見るところ：\n・誤訳（意味の取り違え）、訳抜け、構文の取り違え（下の SVO 分解に照らして、主語・動詞・目的語・補語や、修飾のかかり方がずれていないか）。\n'
+    +'・日本語として不自然で、意味が伝わりにくいところ。\n'
+    +'返し方：\n・です・ます調。前置きは要らない。指摘は大事なものから最大4つ。箇条は「・」で始める。\n'
+    +'・各指摘は「英文の該当箇所（短く引用）→ 何がずれているか → どう直すとよいか」を1〜2文で書く。\n'
+    +'・模範和訳は参考。KANTAくんの訳が別の表現でも意味を正しく取れていれば、模範どおりでなくても指摘しない。模範和訳の全文は書き写さない。\n'
+    +'・大きな問題がなければそう伝え、よくできている点を一つ添える。\n'
+    +'・全体で400字以内。見出しや記号での強調は使わない。\n'
+    +'【SVO 分解の記法】[ ] 名詞のまとまり、( ) 名詞を説明するまとまり、< > 副詞のまとまり、_ … _ 動詞。語の直後の ^S ^V ^O ^C ^M ^A はその語の役割（主語・動詞・目的語・補語・修飾・名詞の説明）、\' は節の中。\n';
+  function fmtTime(t){ var d=new Date(t); return (d.getMonth()+1)+'/'+d.getDate()+' '+d.getHours()+':'+('0'+d.getMinutes()).slice(-2); }
+  function reviewHTML(r){
+    return '<div class="rv"><div class="rv-date">'+esc(fmtTime(r.at))+' の和訳への指摘</div>'+bubble('t', r.review)
+      +'<details><summary>このときの和訳</summary><p>'+esc(r.mine)+'</p></details></div>';
+  }
+  function bindReview(root, tr, p, ta){
+    var btn=root.querySelector('.psg-review-btn'), list=root.querySelector('.psg-reviews'), busy=false;
+    function render(){ list.innerHTML=((loadMyTr()[tr]||{}).reviews||[]).slice().reverse().map(reviewHTML).join(''); }
+    function net(){ btn.disabled=busy || !online(); btn.textContent=!online() ? '圏外' : busy ? '先生が読んでいます…' : '先生に見てもらう'; }
+    render(); net();
+    window.addEventListener('online', net); window.addEventListener('offline', net);
+    btn.addEventListener('click', function(){
+      var mine=ta.value.trim();
+      if(busy || !online()) return;
+      if(!mine){ alert('和訳を書いてから押してください'); ta.focus(); return; }
+      (apiKey() ? Promise.resolve(true) : askKey()).then(function(ok){
+        if(!ok) return;
+        busy=true; net();
+        list.insertAdjacentHTML('afterbegin', '<div class="rv rv-wait">'+bubble('t', '…', 'typing')+'</div>');
+        var system=[{ type:'text', text:REVIEW, cache_control:{ type:'ephemeral' } },
+          { type:'text', text:'\n【英文】'+tr+'\n'+p.text+'\n\n【SVO 分解】\n'+(p.svo||[]).join('\n')+'\n\n【模範和訳（下書き）】\n'+(p.translation||'') }];
+        callClaude(system, '【KANTAくんの和訳】\n'+mine).then(function(text){
+          var all=loadMyTr(), ent=all[tr]||{ text:ta.value, at:Date.now() };
+          ent.reviews=(ent.reviews||[]).concat([{ at:Date.now(), mine:mine, review:text || '（答えが空でした）' }]).slice(-30);
+          all[tr]=ent; saveMyTr(all);
+          render();
+        }, function(err){
+          var w=list.querySelector('.rv-wait'); if(w) w.remove();
+          list.insertAdjacentHTML('afterbegin', '<div class="rv">'+bubble('t', err.status==='refusal' ? err.message : err.status===401 ? '鍵が正しくないようです。コレクション画面の「鍵を消す」から入れ直してください。'
+            : err.status ? 'うまく読めませんでした（'+err.status+'：'+err.message+'）' : '通信できませんでした。もう一度押してください', 'err')+'</div>');
+        }).then(function(){ busy=false; net(); });
+      });
+    });
+  }
+  function closePassage(){ psg.classList.remove('on'); psg.setAttribute('aria-hidden','true'); }
+  document.getElementById('psgClose').addEventListener('click', closePassage);
+  psg.addEventListener('keydown', function(e){ if(e.key==='Escape' && !e.target.closest('textarea')) closePassage(); });
+  window.addEventListener('resize', function(){ if(psg.classList.contains('on')) psg.querySelectorAll('.psg-flow.on').forEach(unclash); });
+
+  var etym=document.getElementById('etym'), flash=document.getElementById('flash');
+  var etymCard=null, etymDone=null;
+
+  function showEtym(c, card, x, y, onClosed){
+    etym.innerHTML=etymHTML(c);
+    var closeBtn=etym.querySelector('.close');
+    closeBtn.addEventListener('click', closeEtym);
+    var cb=etym.querySelector('.chat'); if(cb) bindChat(cb, c);
+    etym.querySelectorAll('.trbtn').forEach(function(b){ b.addEventListener('click', function(){ openPassage(b.dataset.tr); }); });
+    etymCard=card; etymDone=onClosed;
+    etym.style.setProperty('--cx', x+'px'); etym.style.setProperty('--cy', y+'px');
+    setTimeout(function(){
+      card.classList.add('burst');
+      etym.classList.remove('hide'); etym.classList.add('show'); etym.setAttribute('aria-hidden','false');
+      closeBtn.focus({preventScroll:true});
+    },120);
+  }
+  function closeEtym(){
+    if(!etymCard) return;
+    var card=etymCard, done=etymDone; etymCard=null;
+    etym.classList.remove('show'); etym.classList.add('hide'); etym.setAttribute('aria-hidden','true');
+    card.classList.remove('burst');
+    setTimeout(function(){ etym.classList.remove('hide'); if(done) done(); },520);
+  }
+  etym.addEventListener('keydown', function(e){ if(e.key==='Escape' && !e.target.closest('.chat')) closeEtym(); });
+
+  /* ---- 操作（見本と同じ）。card.dataset.locked の間は反応しない ---- */
+  function bindCard(card, c){
+    var sparks=card.querySelector('.sparks');
+    var HOLD=1100, TAP=300;
+    var pressing=false, start=0, raf=0, sx=0, sy=0, moved=false, lastSpark=0, done=false, pid=null;
+
+    function setP(p){ card.style.setProperty('--p', p.toFixed(3)); }
+
+    function spawn(p){
+      var s=document.createElement('span'); s.className='spark';
+      s.style.left=(5+Math.random()*90)+'%';
+      s.style.setProperty('--dx', ((Math.random()-.5)*60)+'px');
+      s.style.setProperty('--dy', (60+Math.random()*180*(0.4+p))+'px');
+      s.style.setProperty('--d', (0.7+Math.random()*0.6)+'s');
+      s.style.width=s.style.height=(3+Math.random()*5)+'px';
+      if(Math.random()<.25){ s.style.background='#c89b3c'; s.style.boxShadow='0 0 8px 2px rgba(200,155,60,.7)'; }
+      sparks.appendChild(s);
+      s.addEventListener('animationend', function(){ s.remove(); });
+    }
+
+    function loop(now){
+      if(!pressing) return;
+      var p=Math.min(1,(now-start)/HOLD);
+      setP(p);
+      var gap=140-120*p;
+      if(now-lastSpark>gap){ spawn(p); lastSpark=now; if(p>.6) spawn(p); }
+      if(p>=1){ complete(); return; }
+      raf=requestAnimationFrame(loop);
+    }
+
+    function release(){
+      pressing=false; cancelAnimationFrame(raf);
+      card.classList.remove('press');
+      try{ if(pid!==null) card.releasePointerCapture(pid); }catch(e){}
+      pid=null;
+      setP(0);
+    }
+
+    function complete(){
+      if(done) return; done=true;
+      pressing=false; cancelAnimationFrame(raf);
+      card.classList.remove('press');
+      try{ if(pid!==null) card.releasePointerCapture(pid); }catch(e){}
+      for(var i=0;i<28;i++) spawn(1);
+      flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
+      showEtym(c, card, sx, sy, function(){ done=false; });
+      setTimeout(function(){ setP(0); },400);
+    }
+
+    card.addEventListener('pointerdown', function(e){
+      if(done || card.dataset.locked) return;
+      if(card.classList.contains('flipped')){ pressing=false; start=performance.now(); moved=false; sx=e.clientX; sy=e.clientY; return; }
+      pressing=true; moved=false; start=performance.now(); lastSpark=start; sx=e.clientX; sy=e.clientY; pid=e.pointerId;
+      try{ card.setPointerCapture(pid); }catch(err){}
+      card.classList.add('press');
+      raf=requestAnimationFrame(loop);
+      e.preventDefault();
+    });
+    card.addEventListener('pointermove', function(e){
+      if(Math.abs(e.clientX-sx)>12||Math.abs(e.clientY-sy)>12) moved=true;
+      /* めくれる画面では、横に動かしたら長押しをやめる（スワイプと取り違えない） */
+      if(pressing && card.dataset.swipe && Math.abs(e.clientX-sx)>14) release();
+    });
+    function up(e){
+      if(done || card.dataset.locked) return;
+      var dt=performance.now()-start;
+      var wasPressing=pressing;
+      if(wasPressing) release();
+      if(dt<TAP && !moved) card.classList.toggle('flipped');
+    }
+    card.addEventListener('pointerup', up);
+    card.addEventListener('pointercancel', function(){ if(pressing) release(); });
+    card.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+    card.addEventListener('keydown', function(e){
+      if(card.dataset.locked) return;
+      if(e.key===' '||e.key==='Enter'){ e.preventDefault(); card.classList.toggle('flipped'); }
+      if(e.key==='e'||e.key==='E'){ sx=innerWidth/2; sy=innerHeight/2; complete(); }
+    });
+  }
+
+  function mountCard(host, c, o){
+    o=o||{};
+    host.innerHTML=cardHTML(c, o.kira);
+    var el=host.querySelector('.card');
+    if(o.flipped) el.classList.add('flipped');
+    if(o.locked) el.dataset.locked='1';
+    if(o.swipe) el.dataset.swipe='1';
+    if(!o.inert) bindCard(el, c);
+    return el;
+  }
+
+  /* =====================================================
+     状態（localStorage）
+     ===================================================== */
+  var HOUR=3600e3, FULL=6*HOUR, PACK=5, PACK_NEW=2, RECALL=3000, SHOW_ANSWER=3000;
+  var KEY='eitango.v1';
+
+  function fresh(){
+    return {
+      v:1,
+      owned:{},          /* id → { order, first, met, kira } */
+      nextOrder:1,
+      charge:2*FULL,     /* ゲージ（ms）。初期は2パック分 */
+      chargeAt:Date.now(),
+      points:0,
+      lastOpen:null,
+      quizLog:{},        /* id → 出題日 'YYYY-MM-DD'（当日分だけ残す） */
+      pending:null       /* 開封途中のパック */
+    };
+  }
+  function valid(s){ return s && s.v===1 && typeof s.owned==='object' && typeof s.charge==='number'; }
+  function load(){
+    try{ var s=JSON.parse(localStorage.getItem(KEY)); if(valid(s)) return s; }catch(e){}
+    return fresh();
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+  /* ゲージは満タン未満のときだけ時間で溜まる。満タン以上（初期の2パック分など）はそのまま */
+  function charge(){
+    var c=S.charge;
+    if(c<FULL) c=Math.min(FULL, c+Math.max(0, Date.now()-S.chargeAt));
+    return c;
+  }
+  function settle(){ S.charge=charge(); S.chargeAt=Date.now(); }
+  function pointsNeeded(){ var c=charge(); return c>=FULL ? 0 : Math.ceil((FULL-c)/HOUR); }
+
+  function dayKey(t){
+    var d=t ? new Date(t) : new Date();
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  }
+  function shuffle(a){
+    a=a.slice();
+    for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; }
+    return a;
+  }
+  function fmt(ms){
+    var m=Math.ceil(ms/60000), h=Math.floor(m/60); m=m%60;
+    return h ? h+'時間'+(m ? m+'分' : '') : m+'分';
+  }
+
+  var S, CARDS=[], BYID={}, APPROVED=[], WORDS=[];
+
+  /* =====================================================
+     画面切り替え
+     ===================================================== */
+  var screens=['home','open','result','viewer','collection','quiz','quizEnd','ctest'];
+  var current=null, homeTimer=0;
+  function show(name){
+    screens.forEach(function(s){ document.getElementById(s).classList.toggle('on', s===name); });
+    current=name;
+    clearInterval(homeTimer);
+    if(name==='home'){ renderHome(); homeTimer=setInterval(renderHome, 20000); }
+  }
+  function $(id){ return document.getElementById(id); }
+
+  /* =====================================================
+     1. ホーム
+     ===================================================== */
+  var SET_NAME={ list:'初級', tr:'TR' };
+  var packs=[].slice.call(document.querySelectorAll('.shelf .pack'));
+  function setCards(set){ return APPROVED.filter(function(c){ return (c.set||'list')===set; }); }
+  function renderHome(){
+    var c=charge(), n=Math.floor(c/FULL), need=pointsNeeded();
+    $('gaugeBar').style.setProperty('--g', Math.min(1, c/FULL).toFixed(3));
+    $('gaugeTxt').innerHTML=n>=1 ? '<b>満タン</b><span>'+(n>=2 ? '×'+n : '')+'</span>' : '<span>あと '+fmt(FULL-c)+'</span><span></span>';
+    var st='', can=false;
+    if(S.pending){
+      st=SET_NAME[S.pending.set||'list']+'パックの開封の続き'; can=true;
+    }else if(!APPROVED.length){
+      st='承認済みのカードがまだありません';
+    }else if(n>=1){
+      st='開けるパックを選んでください'; can=true;
+    }else if(S.points>=need){
+      st=need+'ポイントを使えば今すぐ開けられます'; can=true;
+    }
+    $('homeStatus').innerHTML=st+'<small>ポイント '+S.points+'</small>';
+    packs.forEach(function(p){
+      var set=p.dataset.set;
+      var ok=can && setCards(set).length>0 && (!S.pending || (S.pending.set||'list')===set);
+      p.classList.toggle('ready', ok);
+      p.classList.toggle('locked', !ok);
+      p.setAttribute('aria-label', SET_NAME[set]+'パック。'+(ok ? '開けられます' : '今は開けられません'));
+    });
+    var owned=Object.keys(S.owned).length;
+    $('collBtn').textContent='コレクション　'+owned+'枚';
+  }
+  var pack=null;   /* 開封に選ばれたパック（破く画面で同じ絵柄を使う） */
+  function tapPack(p){
+    if(!p.classList.contains('ready')) return;
+    pack=p;
+    if(!S.pending){
+      var set=p.dataset.set;
+      settle();
+      if(S.charge<FULL){
+        var need=pointsNeeded();
+        if(S.points<need) return;
+        S.points-=need; S.charge+=need*HOUR;
+      }
+      S.charge-=FULL; S.chargeAt=Date.now(); S.lastOpen=Date.now();
+      S.pending={ set:set, cards:composePack(set), idx:0, torn:false };
+      save();
+    }
+    startOpen();
+  }
+  packs.forEach(function(p){
+    p.addEventListener('click', function(){ tapPack(p); });
+    p.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); tapPack(p); } });
+  });
+
+  /* 手持ち3枚（復習）＋未所持2枚（発見）。未所持が足りなければ手持ちで、手持ちが足りなければ未所持で埋める。
+     発見を最後に置く。
+     手持ちは「そのセット＋met」から。
+     新規は met の未所持を先に引き（ランダム）、なくなったらそのセットの未所持から引く。
+     TR の新規は TR 番号の小さい順（同じ TR の中はランダム）。初級の新規はランダム */
+  function trNum(c){ return parseInt(String(c.tr||'').replace(/\D/g,''),10)||9999; }
+  function composePack(set){
+    var pool=APPROVED.filter(function(c){ var cs=c.set||'list'; return cs===set || cs==='met'; });
+    var ids=pool.map(function(c){ return c.id; });
+    var have=shuffle(ids.filter(function(id){ return S.owned[id]; }));
+    var metNew=shuffle(pool.filter(function(c){ return c.set==='met' && !S.owned[c.id]; }).map(function(c){ return c.id; }));
+    var setNew=shuffle(pool.filter(function(c){ return (c.set||'list')===set && !S.owned[c.id]; }).map(function(c){ return c.id; }));
+    if(set==='tr') setNew.sort(function(a,b){ return trNum(BYID[a])-trNum(BYID[b]); });
+    var fresh_=metNew.concat(setNew);
+    var n=Math.min(PACK, ids.length);
+    var nNew=Math.min(PACK_NEW, fresh_.length);
+    var nOld=Math.min(n-nNew, have.length);
+    nNew=Math.min(n-nOld, fresh_.length);
+    return have.slice(0,nOld).map(function(id){ return { id:id, isNew:false, done:false }; })
+      .concat(fresh_.slice(0,nNew).map(function(id){ return { id:id, isNew:true, done:false }; }));
+  }
+
+  /* =====================================================
+     2. 開封：破く → 1枚ずつ反転 → 結果一覧
+     ===================================================== */
+  function startOpen(){
+    var P=S.pending;
+    show('open');
+    if(!P.torn) renderTear(); else renderOpenCard();
+  }
+
+  function renderTear(){
+    $('openCount').textContent='';
+    $('openWord').textContent=''; $('openWord').classList.add('off');
+    var set=S.pending.set||'list', art=pack||document.querySelector('.shelf .pack[data-set="'+set+'"]');
+    $('openStage').innerHTML='<div class="tear-wrap"><div class="pack ready'+(set==='tr' ? ' tr' : '')+'" id="tearPack" tabindex="0" role="button" aria-label="パックを破く">'
+      +art.innerHTML+'<div class="pk-top"><div class="pk-cut"></div></div></div></div>';
+    $('openCtl').textContent='上の端を横になぞって破く';
+    var tp=$('tearPack'), top=tp.querySelector('.pk-top'), sx=0, on=false, torn=false;
+    tp.style.setProperty('--g','1');
+    function setT(t){ top.style.setProperty('--t', t.toFixed(3)); }
+    tp.addEventListener('pointerdown', function(e){
+      if(torn) return; on=true; sx=e.clientX;
+      try{ tp.setPointerCapture(e.pointerId); }catch(err){}
+      e.preventDefault();
+    });
+    tp.addEventListener('pointermove', function(e){
+      if(!on||torn) return;
+      var t=Math.min(1, Math.abs(e.clientX-sx)/(tp.offsetWidth*.7));
+      setT(t);
+      if(t>=1) tear();
+    });
+    function end(){ if(!torn){ on=false; setT(0); } }
+    tp.addEventListener('pointerup', end);
+    tp.addEventListener('pointercancel', end);
+    tp.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); setT(1); tear(); } });
+    function tear(){
+      if(torn) return; torn=true; on=false;
+      tp.classList.add('torn');
+      $('openCtl').textContent='';
+      setTimeout(function(){ tp.classList.add('gone'); }, 380);
+      setTimeout(function(){ S.pending.torn=true; save(); renderOpenCard(); }, 900);
+    }
+    tp.focus({preventScroll:true});
+  }
+
+  function renderOpenCard(){
+    var P=S.pending, e=P.cards[P.idx], c=BYID[e.id];
+    $('openCount').textContent=(P.idx+1)+' / '+P.cards.length;
+    var w=$('openWord'); w.textContent=c.word; w.classList.remove('off');
+    var o=S.owned[e.id];
+    var card=mountCard($('openStage'), c, { kira:o&&o.kira, flipped:!e.done, locked:!e.done });
+    var ctl=$('openCtl');
+    if(e.done){ nextButton(); w.classList.add('off'); return; }
+
+    if(e.isNew){
+      ctl.innerHTML='<button type="button" class="btn" data-k="0">知ってる</button><button type="button" class="btn" data-k="1">知らない</button>';
+      ctl.querySelectorAll('button').forEach(function(b){
+        b.addEventListener('click', function(){
+          var unknown=b.dataset.k==='1' || misreads(c).length>0;
+          S.owned[e.id]={ order:S.nextOrder++, first:Date.now(), met:1, kira:unknown };
+          e.done=true; save();
+          if(unknown){ mountCard($('openStage'), c, { kira:true, flipped:true, locked:true }); card=$('openStage').querySelector('.card'); void card.offsetWidth; }
+          reveal(card);
+        });
+      });
+    }else{
+      /* ダブり：反転前に意味を思い出す時間 */
+      ctl.innerHTML='<span class="recall">意味を思い出す</span>';
+      setTimeout(function(){
+        if(current!=='open' || S.pending!==P || P.idx!==P.cards.indexOf(e)) return;
+        S.owned[e.id].met++;
+        e.done=true; save();
+        reveal(card);
+      }, RECALL);
+    }
+  }
+
+  function reveal(card){
+    $('openCtl').innerHTML='';
+    $('openWord').classList.add('off');
+    card.classList.remove('flipped');
+    setTimeout(function(){ delete card.dataset.locked; nextButton(); }, 700);
+  }
+
+  function nextButton(){
+    var P=S.pending, last=P.idx>=P.cards.length-1;
+    $('openCtl').innerHTML='<button type="button" class="btn primary">'+(last ? '結果を見る' : '次へ')+'</button>';
+    $('openCtl').querySelector('button').addEventListener('click', function(){
+      if(last){ finishOpen(); return; }
+      P.idx++; save(); renderOpenCard();
+    });
+  }
+
+  function finishOpen(){
+    var P=S.pending; S.pending=null; save();
+    var list=$('resultList');
+    list.innerHTML=P.cards.map(function(e){
+      var c=BYID[e.id], o=S.owned[e.id];
+      return '<div class="row"><b>'+esc(c.word)+'</b><span>'+esc((c.senses||[])[0]||'')+'</span>'
+        +(e.isNew ? '<i class="tag">新しく出会った</i>' : '')
+        +(o.kira ? '<i class="tag k">キラ</i>' : '')
+        +'<em>会った '+o.met+'回</em></div>';
+    }).join('');
+    document.querySelector('#result .h2').textContent='今回の'+P.cards.length+'枚';
+    show('result');
+  }
+  $('resultHome').addEventListener('click', function(){ show('home'); });
+
+  /* =====================================================
+     3. カード／4. コレクション
+     ===================================================== */
+  /* 初級／TR のどちらのコレクションか。出会った語（met）は TR 番号があれば TR、なければ初級 */
+  var collSet=null;
+  function collOf(c){ var st=c.set||'list'; return st==='met' ? (srcTr(c) ? 'tr' : 'list') : st; }
+  function renderCollection(){
+    var all=Object.keys(S.owned).filter(function(id){ return BYID[id]; })
+      .sort(function(a,b){ return S.owned[a].order-S.owned[b].order; });
+    document.querySelectorAll('.coll-btn').forEach(function(b){
+      b.querySelector('span').textContent=all.filter(function(id){ return collOf(BYID[id])===b.dataset.set; }).length+'枚';
+    });
+    $('collPick').hidden=!!collSet; $('collView').hidden=!collSet;
+    $('collClose').setAttribute('aria-label', collSet ? 'コレクションの選択に戻る' : '閉じる');
+    if(!collSet) return;
+    $('collTitle').textContent=(collSet==='tr' ? 'TR' : '初級')+'のコレクション';
+    var ids=all.filter(function(id){ return collOf(BYID[id])===collSet; });
+    var g=$('grid');
+    $('ctBtn').hidden=!ids.length;
+    if(!ids.length){ g.innerHTML='<div class="empty" style="grid-column:1/-1">まだカードがありません</div>'; return; }
+    g.innerHTML=ids.map(function(id){
+      var c=BYID[id], o=S.owned[id];
+      return '<button type="button" class="tile'+(o.kira ? ' kira' : '')+'" data-id="'+esc(id)+'">'
+        +(o.kira ? '<div class="holo"></div>' : '')
+        +(srcTr(c) ? '<span class="badge">'+esc(srcTr(c))+'</span>' : '')
+        +'<b>'+esc(c.word)+'</b>'
+        +'<span class="tf">'+(!o.kira && o.learned ? '<em class="lrn">知らなかった→覚えた</em>' : '')+'<em>会った '+o.met+'回</em><i>'+(o.kira ? '◆◆◆' : '◇◇◇')+'</i></span></button>';
+    }).join('');
+  }
+  function collIds(set){
+    return Object.keys(S.owned).filter(function(id){ return BYID[id] && collOf(BYID[id])===set; })
+      .sort(function(a,b){ return S.owned[a].order-S.owned[b].order; });
+  }
+
+  /* カードを開いた画面：並びはコレクションと同じ（出会った順）。端まで行ったら一周 */
+  var view={ ids:[], i:0 }, claimTimers=[];
+  function stopClaim(){ claimTimers.forEach(clearTimeout); claimTimers=[]; }
+  function openView(d){
+    stopClaim();
+    var id=view.ids[view.i], c=BYID[id], st=$('viewerStage');
+    var card=mountCard(st, c, { kira:S.owned[id].kira, swipe:true });
+    st.classList.remove('in-l','in-r');
+    if(d){ void st.offsetWidth; st.classList.add(d>0 ? 'in-l' : 'in-r'); }
+    $('viewerN').textContent=view.ids.length>1 ? (view.i+1)+' / '+view.ids.length : '';
+    $('viewerPrev').hidden=$('viewerNext').hidden=view.ids.length<2;
+    $('viewerChat').innerHTML='';
+    renderClaim();
+    /* 「覚えた気がする」は表を見ているときだけ */
+    new MutationObserver(renderClaim).observe(card, { attributes:true, attributeFilter:['class'] });
+  }
+  function renderClaim(){
+    var id=view.ids[view.i], card=$('viewerStage').querySelector('.card'), b=$('claimBtn');
+    b.hidden=!card || card.classList.contains('flipped');
+    var claimed=!!(S.owned[id] && S.owned[id].claim);
+    b.disabled=claimed; b.textContent=claimed ? '次のコレクションテストで確かめます' : '覚えた気がする';
+  }
+  function turn(d){
+    if(current!=='viewer' || view.ids.length<2 || etymCard || psg.classList.contains('on')) return;
+    view.i=(view.i+d+view.ids.length)%view.ids.length;
+    openView(d);
+  }
+  $('grid').addEventListener('click', function(e){
+    var t=e.target.closest('.tile'); if(!t) return;
+    view.ids=collIds(collSet); view.i=Math.max(0, view.ids.indexOf(t.dataset.id));
+    show('viewer');
+    openView(0);
+  });
+  $('viewerPrev').addEventListener('click', function(){ turn(-1); });
+  $('viewerNext').addEventListener('click', function(){ turn(1); });
+  (function(){
+    var st=$('viewerStage'), x0=0, y0=0, t0=0, on=false;
+    st.addEventListener('pointerdown', function(e){ on=true; x0=e.clientX; y0=e.clientY; t0=performance.now(); });
+    st.addEventListener('pointerup', function(e){
+      if(!on) return; on=false;
+      var dx=e.clientX-x0, dy=e.clientY-y0;
+      if(Math.abs(dx)>50 && Math.abs(dx)>Math.abs(dy)*1.3 && performance.now()-t0<900) turn(dx<0 ? 1 : -1);
+    });
+    st.addEventListener('pointercancel', function(){ on=false; });
+  })();
+  document.addEventListener('keydown', function(e){
+    if(current!=='viewer' || e.target.closest('input,textarea')) return;
+    if(e.key==='ArrowRight') turn(1);
+    if(e.key==='ArrowLeft') turn(-1);
+  });
+
+  /* 覚えた気がする：定型の掛け合い（API は使わない）。語ごとの会話の記録に残し、次のコレクションテストで先に出す */
+  var CLAIM_T=['ほんとですかね。まあ、信じましょう。',
+    '「気がする」が少し気になりますが……今回は信じます。',
+    'その言葉、前にも聞いた気がしますね。でも、信じましょう。',
+    'ほう。では、その自信を覚えておきますね。',
+    '気がする、ですか。まあ、気がするのも大事な一歩です。',
+    '本当ですか？ 顔に「たぶん」と書いてありますよ。……信じますけど。',
+    'わかりました。信じます。半分くらい。',
+    'いいですね。その「気」が本物かどうか、楽しみにしています。',
+    'ふむ。疑うのも失礼なので、ここは信じておきましょう。',
+    'では、そういうことにしておきましょう。'];
+  var CLAIM_K=['本当ですからね。次の小テスト、見ててください！',
+    '疑ってますね？ テストで証明してみせます！',
+    '次のテストで出たら、一瞬で答えますから！',
+    '今回は本当です。たぶん。いや、本当です！',
+    '見ててください。次は迷わず選びます！',
+    '信じてくれてありがとうございます。裏切りません！',
+    'テストで出してください。自信あります！',
+    '今度こそ大丈夫です。次の小テストで分かります！',
+    'ふふふ、次のテストを楽しみにしててください。',
+    '覚えました。……気がするじゃなくて、覚えました！'];
+  function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+  /* 吹き出しを「…」のあとに出す。lead は「…」を出しておく時間 */
+  function talk(log, who, html, lead, timers, pcls){
+    return new Promise(function(res){
+      var t=null;
+      timers.push(setTimeout(function(){
+        if(lead){ log.insertAdjacentHTML('beforeend', bubble(who, '…', 'typing')); t=log.lastElementChild; scrollEnd(t); }
+        timers.push(setTimeout(function(){
+          if(t) t.remove();
+          log.insertAdjacentHTML('beforeend', bubbleHTML(who, html, 'new', pcls)); scrollEnd(log.lastElementChild); res();
+        }, lead||0));
+      }, 0));
+    });
+  }
+  function scrollEnd(el){ if(el && el.scrollIntoView) el.scrollIntoView({ block:'nearest', behavior:'smooth' }); }
+  $('claimBtn').addEventListener('click', function(){
+    var id=view.ids[view.i], c=BYID[id], o=S.owned[id]; if(!o || o.claim) return;
+    var k1='先生、この《'+c.word+'》覚えた気がします！', t1=pick(CLAIM_T), k2=pick(CLAIM_K), now=Date.now();
+    o.claim=now; save(); renderClaim();
+    var all=loadChats();
+    all[id]=(all[id]||[]).concat([{ role:'user', content:k1, at:now, canned:true }, { role:'assistant', content:t1, at:now, canned:true }, { role:'user', content:k2, at:now, canned:true }]).slice(-CHAT_KEEP);
+    saveChats(all);
+    stopClaim();
+    var log=$('viewerChat'); log.innerHTML='';
+    talk(log, 'k', esc(k1), 0, claimTimers)
+      .then(function(){ return talk(log, 't', esc(t1), 1300, claimTimers); })
+      .then(function(){ return talk(log, 'k', esc(k2), 1100, claimTimers); });
+  });
+  $('collBtn').addEventListener('click', function(){ collSet=null; renderCollection(); show('collection'); });
+  document.querySelectorAll('.coll-btn').forEach(function(b){
+    b.addEventListener('click', function(){ collSet=b.dataset.set; renderCollection(); $('collection').scrollTop=0; });
+  });
+  $('collClose').addEventListener('click', function(){
+    if(collSet){ collSet=null; renderCollection(); return; }
+    show('home');
+  });
+  $('viewerClose').addEventListener('click', function(){ stopClaim(); renderCollection(); show('collection'); });
+
+  /* 保存：JSON の書き出し／読み込み */
+  $('forgetKeyBtn').addEventListener('click', function(){
+    if(!apiKey()){ alert('鍵はまだ入っていません'); return; }
+    if(!confirm('この端末に保存した API キーを消します')) return;
+    try{ localStorage.removeItem(APIKEY); }catch(e){}
+    renderNet();
+  });
+  $('exportBtn').addEventListener('click', function(){
+    /* 会話（eigo:chats）も含める。鍵は含めない */
+    var blob=new Blob([JSON.stringify(Object.assign({}, S, { chats:loadChats(), mytr:loadMyTr() }), null, 1)], { type:'application/json' });
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='eitango-'+dayKey().replace(/-/g,'')+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  });
+  $('importBtn').addEventListener('click', function(){ $('importFile').click(); });
+  $('importFile').addEventListener('change', function(){
+    var f=this.files[0]; this.value='';
+    if(!f) return;
+    f.text().then(function(t){
+      var s; try{ s=JSON.parse(t); }catch(e){ s=null; }
+      /* 本文データのファイル（公開しない）。記録は置き換えずに、本文だけを取り込む */
+      if(s && s.kind==='eigo-passages' && Array.isArray(s.passages) && s.passages.length){
+        try{ localStorage.setItem(PSG_KEY, JSON.stringify(s)); alert('「'+(s.title||'本文')+'」を読み込みました（'+s.passages.length+'題）'); }
+        catch(e){ alert('本文を保存できませんでした（端末の空き容量を確認してください）'); }
+        return;
+      }
+      if(!valid(s)){ alert('このファイルは読み込めません'); return; }
+      if(!confirm('いまの記録をこのファイルの内容で置き換えます')) return;
+      if(s.chats && typeof s.chats==='object' && !Array.isArray(s.chats)) saveChats(s.chats);
+      if(s.mytr && typeof s.mytr==='object' && !Array.isArray(s.mytr)) saveMyTr(s.mytr);
+      delete s.chats; delete s.mytr;
+      S=s; save(); renderCollection();
+    });
+  });
+
+  /* =====================================================
+     5. 小テスト：全カードからランダム5問。英→日と日→英を交互に。
+        4択の誤答は同じセット（初級は同じ品詞の区分、TR は構文以外／構文）から引く。
+        構文カードは「一文を見せて、空所に入る構文を選ぶ」形にする
+     ===================================================== */
+  var Q=null, QITEMS=[];
+
+  /* TR の構文：A・B・S・人・… などの型を含む句。1語の項目と、one's／oneself だけの熟語は除く */
+  var CON_RE=/\.\.\.|…|(?:^|[^A-Za-z])[ABS](?![A-Za-z])|人|形容詞|倒置|強調|仮定法|付帯状況|関係代名詞|-ing|(?:^|[^A-Za-z])do(?![A-Za-z])|時間/;
+  function bare(w){ return w.replace(/（.*?）/g,'').trim(); }
+  function isConstruct(c){
+    if(c.set!=='tr') return false;
+    var b=bare(c.word);
+    if(!/\s/.test(b) && !/仮定法/.test(b)) return false;
+    return CON_RE.test(c.word);
+  }
+  /* 構文の決まった語（A・B・… などの型を除いた英単語）を、一文の中で順に空所にする */
+  var HOLDERS={ a:1, b:1, s:1, v:1, 'do':1, "one's":1, oneself:1 };
+  function blankSentence(sent, word){
+    var toks=bare(word).split(/\s+/).filter(function(t){ return /^[A-Za-z][A-Za-z'’]*$/.test(t) && !HOLDERS[t.toLowerCase()]; });
+    if(toks.length>1 && toks[0].toLowerCase()==='be') toks.shift();   /* 先頭の be は is/are/was に変わるので探さない */
+    var out='', pos=0, hits=0, low=sent;
+    toks.forEach(function(t){
+      var re=new RegExp("(?<![A-Za-z'’-])"+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+(t.length>3 ? "[a-z'’]*" : '')+"(?![A-Za-z'’-])", 'ig');
+      re.lastIndex=pos;
+      var m=re.exec(low);
+      if(!m) return;
+      out+=esc(sent.slice(pos, m.index))+'<span class="blank">'+esc(m[0])+'</span>';
+      pos=m.index+m[0].length; hits++;
+    });
+    return { html: out+esc(sent.slice(pos)), hits: hits };
+  }
+  function buildQuiz(){
+    var inWords={}; WORDS.forEach(function(w){ inWords[w.id]=1; });
+    QITEMS=WORDS.map(function(w){ return { id:w.id, word:w.word, meaning:w.meaning, set:'list', group:'list:'+w.category }; })
+      .concat(APPROVED.filter(function(c){ return (c.set==='tr' || c.set==='met') && !inWords[c.id]; }).map(function(c){
+        var con=isConstruct(c) || (c.set==='met' && c.tr && isConstruct({ set:'tr', word:c.word }));
+        var sent=c.sentence || ((c.origin||[]).filter(function(o){ return o.sentence; })[0]||{}).sentence || '';
+        /* TR から昇格した met は TR の仲間として出す。新しく来た met は met どうし（足りなければ TR から補う） */
+        var grp=c.tr ? (con ? 'tr:con' : 'tr') : 'met';
+        return { id:c.id, word:c.word, meaning:(c.senses||[])[0]||'', set:c.set, group:grp, sentence:sent, con:con && !!sent };
+      }));
+  }
+
+  /* 初級テスト／TRテスト。出題範囲はコレクションと同じ振り分け（出会った語は TR 番号があれば TR）。
+     まだ持っていないカードを優先して出し、正解したらそのカードを手に入れる */
+  function quizSetOf(w){ var c=BYID[w.id]; return c ? collOf(c) : 'list'; }
+  function startQuiz(set){
+    var today=dayKey();
+    Object.keys(S.quizLog).forEach(function(id){ if(S.quizLog[id]!==today) delete S.quizLog[id]; });
+    var all=QITEMS.filter(function(w){ return quizSetOf(w)===set; });
+    var fresh=all.filter(function(w){ return !S.quizLog[w.id]; });
+    if(fresh.length<5) fresh=all;
+    var notOwned=shuffle(fresh.filter(function(w){ return !S.owned[w.id]; })), owned=shuffle(fresh.filter(function(w){ return S.owned[w.id]; }));
+    Q={ set:set, items:notOwned.concat(owned).slice(0,5), i:0, got:0, gained:[], busy:false };
+    show('quiz');
+    renderQ();
+  }
+  /* 4択：誤答は同じ区分から。足りないとき（出会った語の新規など）は同じテストの範囲から補う */
+  function optionsFor(w, set){
+    var ok=function(x){ return x.id!==w.id && x.meaning!==w.meaning && x.word!==w.word; };
+    var others=shuffle(QITEMS.filter(function(x){ return x.group===w.group && ok(x); })).slice(0,3);
+    if(others.length<3) others=others.concat(shuffle(QITEMS.filter(function(x){ return quizSetOf(x)===set && !x.con===!w.con && ok(x) && others.indexOf(x)<0; })).slice(0,3-others.length));
+    return shuffle([w].concat(others));
+  }
+  function renderQ(){
+    var w=Q.items[Q.i], enja=Q.i%2===0, qw=$('qWord');
+    S.quizLog[w.id]=dayKey(); save();
+    $('qN').textContent=(Q.i+1)+' / '+Q.items.length;
+    var opts=optionsFor(w, Q.set), label;
+    if(w.con){
+      var bl=blankSentence(w.sentence, w.word);
+      $('qDir').textContent=bl.hits ? '空所に入る構文' : 'この一文の構文';
+      qw.className='q-word sent'; qw.innerHTML=bl.html;
+      label=function(x){ return x.word; }; enja=false;
+    }else{
+      $('qDir').textContent=enja ? '英 → 日' : '日 → 英';
+      qw.className='q-word '+(enja ? 'en' : 'ja'); qw.textContent=enja ? w.word : w.meaning;
+      label=function(x){ return enja ? x.meaning : x.word; };
+    }
+    $('qOpts').innerHTML=opts.map(function(x){
+      return '<button type="button" class="btn'+(enja ? '' : ' en')+'" data-id="'+esc(x.id)+'">'+esc(label(x))+'</button>';
+    }).join('');
+    $('qPlus').classList.remove('on');
+    Q.busy=false;
+  }
+  $('qOpts').addEventListener('click', function(e){
+    var b=e.target.closest('.btn'); if(!b||Q.busy) return;
+    Q.busy=true;
+    var w=Q.items[Q.i], right=b.dataset.id===w.id;
+    var rb=$('qOpts').querySelector('[data-id="'+CSS.escape(w.id)+'"]');
+    rb.classList.add('ok');
+    if(right){
+      Q.got++; S.points++;
+      /* 正解したカードを手に入れる（まだ持っていないとき）。誤読の記録がある語はキラ */
+      var c=BYID[w.id], fresh=c && c.status==='approved' && !S.owned[w.id];
+      if(fresh){ S.owned[w.id]={ order:S.nextOrder++, first:Date.now(), met:1, kira:misreads(c).length>0 }; Q.gained.push(c.word); }
+      save();
+      $('qPlus').textContent=fresh ? '+1 ポイント　カードをゲット！' : '+1 ポイント';
+      $('qPlus').classList.add('on');
+      setTimeout(nextQ, 800);
+    }else{
+      b.classList.add('ng');
+      setTimeout(function(){ showAnswer(w); }, 500);
+    }
+  });
+  /* 不正解：正解のカードを3秒だけ見せる。承認済みのカードがあればそれ、なければ語と訳語だけ */
+  function showAnswer(w){
+    var c=BYID[w.id], host=$('qShowStage');
+    if(c && c.status==='approved') mountCard(host, c, { kira:S.owned[w.id]&&S.owned[w.id].kira, inert:true });
+    else host.innerHTML=simpleHTML(w);
+    $('qShow').classList.add('on');
+    setTimeout(function(){ $('qShow').classList.remove('on'); host.innerHTML=''; nextQ(); }, SHOW_ANSWER);
+  }
+  function nextQ(){
+    if(!Q || current!=='quiz') return;
+    Q.i++;
+    if(Q.i<Q.items.length){ renderQ(); return; }
+    $('qEndPts').textContent='+'+Q.got;
+    $('qEndSub').textContent='ポイントを足しました　（いま '+S.points+'ポイント）';
+    $('qGot').innerHTML=Q.gained.length ? 'ゲットしたカード：'+Q.gained.map(function(x){ return '<b>'+esc(x)+'</b>'; }).join('、') : '';
+    show('quizEnd');
+  }
+  $('quizListBtn').addEventListener('click', function(){ startQuiz('list'); });
+  $('quizTrBtn').addEventListener('click', function(){ startQuiz('tr'); });
+  $('quizClose').addEventListener('click', function(){ Q=null; $('qShow').classList.remove('on'); show('home'); });
+  $('quizEndHome').addEventListener('click', function(){ show('home'); });
+
+  /* =====================================================
+     6. コレクションテスト：持っているカードの中から5問。LINE 風に先生が出題し、KANTAくん側の吹き出しから選ぶ。
+        「覚えた気がする」と言った語から先に出す。同じ日の再出題の決まりは当てはめない。
+        正解：1ポイント、キラ → ノーマル（覚えた）。不正解：キラに戻す。セリフは定型からランダム（API は使わない）
+     ===================================================== */
+  var CT_LINES={
+    claimOk:{ t:['おお、本当に覚えていましたね。疑ってすみません。', '正解です。「気がする」じゃなくて、本当に覚えてましたね。', 'やりますね。約束どおりです。', '正解。これはもう、覚えたと言っていいですね。', 'お見事。宣言どおりでした。'],
+              k:['ほら！ 言ったじゃないですか！', 'やった！ 信じてもらえてよかったです。', '当然です（内心ほっとしてます）。', 'よし！ 覚えた気がしたのは本物でした。', 'ふふん。次もどんどん出してください。'] },
+    claimNg:{ t:['覚えたって言ってましたよね？ 覚えてないじゃないですか笑', 'あれ？ 「覚えた気がする」の「気がする」のほうでしたね笑', '……約束はどこへ行ったんでしょう笑', 'さっきの自信はどこへ行きました？笑', 'これは「覚えた気がしていた」でしたね笑'],
+              k:['うわあ……完全に覚えたと思ったのに。', 'そんな……あのときは覚えてたんです……！', 'くっ……もう一回、覚え直します。', '恥ずかしい……次こそは本当に。', '気がしただけでした……。'] },
+    /* 「覚えた気がする」と言っていないのに正解：宣言なしで覚えていたので、しっかり褒める（先生の落ち着いた口調のまま） */
+    ok:{ t:['正解です。何も言わずに覚えていたんですね。これは立派です。',
+            '正解。宣言もなしに、きちんと身についている。いちばん良い覚え方です。',
+            'お見事です。自分で気づかないうちに覚えている語は、もう忘れにくいですよ。',
+            '正解です。迷いのない選び方でした。よく読んできた成果ですね。',
+            'その通りです。正直、ここは引っかかると思っていました。見直しました。',
+            '正解。こういう語を黙って覚えているのは、本当に力がついている証拠です。',
+            '素晴らしい。「覚えた気がする」と言わないほうが覚えている、というのは面白いですね。',
+            '正解です。これはもう、KANTAくんの語と言っていいでしょう。'],
+         k:['よし！', 'これは分かりました！', 'やった、正解！', 'ふう、合ってた。', '余裕です（たぶん）。'] },
+    ng:{ t:['残念、違います。', '惜しい……いえ、違います。', 'そこは引っかかりやすいところです。', '違います。でも、ここで間違えたら覚えられます。', 'ううん、違いますね。'],
+         k:['あっ……そっちでしたか。', 'くやしい……！', '覚えたつもりだったのに……。', '次は間違えません。', 'えっ、そうなんですか。'] }
+  };
+  var CT=null;
+  function ctStop(){ if(CT){ CT.timers.forEach(clearTimeout); CT=null; } }
+  function startCollTest(set){
+    ctStop();
+    var own=QITEMS.filter(function(w){ return quizSetOf(w)===set && S.owned[w.id]; });
+    if(!own.length) return;
+    var claimed=shuffle(own.filter(function(w){ return S.owned[w.id].claim; }));   /* 押した語の中の順番もランダム（押した順・一覧の順にしない） */
+    var rest=shuffle(own.filter(function(w){ return !S.owned[w.id].claim; }));
+    /* 押した語は5問のうち4問まで。残りは押していない語から（足りなければ押した語で埋める） */
+    var take=claimed.slice(0,4), more=rest.slice(0,5-take.length);
+    var items=take.concat(more), extra=claimed.slice(4).concat(rest.slice(more.length));
+    items=items.concat(extra.slice(0,5-items.length));
+    CT={ set:set, items:items, i:0, got:0, toNormal:[], toKira:[], timers:[] };
+    var log=$('ctLog'); log.innerHTML=''; $('ctN').textContent='';
+    show('ctest'); $('ctest').scrollTop=0;
+    var intro=(set==='tr' ? 'TR' : '初級')+'のコレクションから'+CT.items.length+'問出します。'
+      +(take.length ? '\nまずは「覚えた気がする」と言っていた語からいきますよ。' : '');
+    var run=CT;
+    talk(log, 't', esc(intro), 900, run.timers).then(function(){ if(CT===run) ctAsk(); });
+  }
+  function ctAsk(){
+    var run=CT, w=run.items[run.i], log=$('ctLog'), enja=run.i%2===0, html, pcls='';
+    $('ctN').textContent=(run.i+1)+' / '+run.items.length;
+    var n='第'+(run.i+1)+'問。';
+    if(w.con){
+      enja=false;
+      html=esc(n+(blankSentence(w.sentence, w.word).hits ? '空所に入る構文はどれでしょう？' : 'この一文の構文はどれでしょう？'))+'<span class="sentq">'+blankSentence(w.sentence, w.word).html+'</span>';
+    }else if(enja){
+      html=esc(n+'《'+w.word+'》の意味はどれでしょう？');
+    }else{
+      html=esc(n+'「'+w.meaning+'」を英語で言うと？');
+    }
+    var opts=optionsFor(w, run.set), label=function(x){ return enja ? x.meaning : x.word; };
+    talk(log, 't', html, 1000, run.timers).then(function(){
+      if(CT!==run) return;
+      log.insertAdjacentHTML('beforeend', '<div class="ct-opts">'+opts.map(function(x){
+        return '<button type="button" class="ct-opt'+(enja ? '' : ' en')+'" data-id="'+esc(x.id)+'">'+esc(label(x))+'</button>';
+      }).join('')+'</div>');
+      var box=log.lastElementChild; scrollEnd(box);
+      box.addEventListener('click', function(e){
+        var b=e.target.closest('.ct-opt'); if(!b || CT!==run) return;
+        var x=opts.filter(function(o){ return o.id===b.dataset.id; })[0];
+        box.remove();
+        log.insertAdjacentHTML('beforeend', bubbleHTML('k', esc(label(x)), 'new', enja ? '' : 'en')); scrollEnd(log.lastElementChild);
+        ctJudge(w, x.id===w.id, label(w));
+      });
+    });
+  }
+  function ctJudge(w, right, answer){
+    var run=CT, log=$('ctLog'), o=S.owned[w.id], c=BYID[w.id];
+    var lines=CT_LINES[(o.claim ? 'claim' : '')+(right ? (o.claim ? 'Ok' : 'ok') : (o.claim ? 'Ng' : 'ng'))];
+    if(right){
+      run.got++; S.points++;
+      if(o.kira){ o.kira=false; o.learned=Date.now(); run.toNormal.push(c.word); }
+    }else{
+      if(!o.kira){ o.kira=true; run.toKira.push(c.word); }
+      delete o.learned;
+    }
+    delete o.claim; save();
+    var t=pick(lines.t)+(right ? '' : '\n正解は「'+answer+'」です。');
+    talk(log, 't', esc(t), 1300, run.timers)
+      .then(function(){ return CT===run && talk(log, 'k', esc(pick(lines.k)), 1000, run.timers); })
+      .then(function(){
+        if(CT!==run) return;
+        run.i++;
+        if(run.i<run.items.length){ ctAsk(); return; }
+        ctEnd();
+      });
+  }
+  function ctEnd(){
+    var run=CT, log=$('ctLog');
+    var t='今日はここまで。'+run.items.length+'問中'+run.got+'問正解で、+'+run.got+'ポイントです（いま '+S.points+'ポイント）。'
+      +(run.toNormal.length ? '\nキラ → ノーマル：'+run.toNormal.join('、') : '')
+      +(run.toKira.length ? '\nノーマル → キラ：'+run.toKira.join('、') : '');
+    talk(log, 't', esc(t), 1200, run.timers).then(function(){
+      if(CT!==run) return;
+      $('ctN').textContent='';
+      log.insertAdjacentHTML('beforeend', '<button type="button" class="btn primary ct-end">コレクションに戻る</button>');
+      var b=log.lastElementChild; scrollEnd(b);
+      b.addEventListener('click', ctClose);
+    });
+  }
+  function ctClose(){ ctStop(); renderCollection(); show('collection'); }
+  $('ctBtn').addEventListener('click', function(){ startCollTest(collSet); });
+  $('ctClose').addEventListener('click', ctClose);
+
+  /* =====================================================
+     起動
+     ===================================================== */
+  S=load();
+  Promise.all([
+    /* カードは元の eitango（/eitango/）の公開分を読む。正本の一文を含むので、下線部のリポジトリには入れない */
+    fetch('../../eitango/cards.json').then(function(r){ return r.json(); }),
+    fetch('words.json').then(function(r){ return r.json(); }),
+    /* 話し方の手本。読めなくても掛け合いは使える */
+    fetch('sensei-samples.json').then(function(r){ return r.json(); }).catch(function(){ return {}; })
+  ]).then(function(res){
+    CARDS=res[0]; WORDS=res[1]; SAMPLES=res[2]||{};
+    CARDS.forEach(function(c){ BYID[c.id]=c; });
+    APPROVED=CARDS.filter(function(c){ return c.status==='approved'; });
+    /* 誤読の記録がある手持ちは、あとから誤読が付いた語も含めてキラにする */
+    /* ただし、コレクションテストで覚えたことを確かめた語（learned）はノーマルのまま */
+    Object.keys(S.owned).forEach(function(id){ if(BYID[id] && misreads(BYID[id]).length && !S.owned[id].learned) S.owned[id].kira=true; });
+    buildQuiz();
+    /* TR セットを入れた日に限り、ゲージを2パック分足す（一度だけ） */
+    if(!S.trBonus && APPROVED.some(function(c){ return c.set==='tr'; })){
+      settle(); S.charge+=2*FULL; S.trBonus=dayKey();
+    }
+    /* 承認が取り消された語が開封途中のパックにあれば外す */
+    if(S.pending){
+      S.pending.cards=S.pending.cards.filter(function(e){ return BYID[e.id]; });
+      if(!S.pending.cards.length || S.pending.idx>=S.pending.cards.length) S.pending=null;
+    }
+    save();
+    show('home');
+  });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && current==='home') renderHome(); });
+
+  /* オフライン用（PWA） */
+  if('serviceWorker' in navigator && location.protocol!=='file:'){
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  }
+})();
+</script>
+</body>
+</html>
