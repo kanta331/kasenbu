@@ -453,3 +453,93 @@ export function recordBest(state, stats) {
   for (const k of Object.keys(stats)) { const v = stats[k].value; if (v != null && (st.statBest[k] == null || v > st.statBest[k])) st.statBest[k] = v; }
   return st;
 }
+
+// ---- 技と対戦（docs/GAME.md ステップ2） ----
+const subjWords = s => s.main?.s ? s.tokens.slice(s.main.s[0], s.main.s[1] + 1) : [];
+const spanAt = s => closableSpan(s);
+/** 技 i（0始まり、lessons.js の順）が、この文・この形式のターンに効くか */
+export const SKILL_FITS = [
+  /* 0 芯を取る */ (s, f) => (f === 'A' || f === 'B') && !(s.spans ?? []).length,
+  /* 1 動詞を見分ける */ (s, f) => f === 'B' && ((s.types ?? []).includes('VPRED') || s.main.v[1] > s.main.v[0]),
+  /* 2 飾りを薄くする */ (s, f) => f === 'A' && subjWords(s).some(t => PREPS.includes(t.toLowerCase())),
+  /* 3 先に述語を探す */ (s, f) => f === 'A' && subjWords(s).filter(isW).length >= 4,
+  /* 4 （ ）を閉じる */ (s, f) => f === 'C' && spanAt(s)?.kind === 'REL' && REL_WORDS.includes(lower(s, spanAt(s).range[0])),
+  /* 5 消えた which を補う */ (s, f) => f === 'C' && spanAt(s)?.kind === 'REL' && !REL_WORDS.includes(lower(s, spanAt(s).range[0])) && !PREPS.includes(lower(s, spanAt(s).range[0])),
+  /* 6 前置詞＋which をほどく */ (s, f) => f === 'C' && spanAt(s)?.kind === 'REL' && PREPS.includes(lower(s, spanAt(s).range[0])),
+  /* 7 -ing／-ed を（ ）に入れる */ (s, f) => f === 'C' && spanAt(s)?.kind === 'PTC' && spanAt(s).head != null,
+  /* 8 割り込みを飛ばす */ (s, f) => (f === 'A' || f === 'B') && spansOf(s, 'INS').length > 0,
+  /* 9 名詞のかたまりにする */ (s, f) => f === 'C' && spanAt(s)?.kind === 'NOUNCL',
+  /* 10 指す先を決める */ (s, f) => f === 'D',
+  /* 11 向きを読む */ (s, f) => f === 'E',
+  /* 12 文頭・文末の -ing を切る */ (s, f) => f === 'C' && spanAt(s)?.kind === 'PTC' && spanAt(s).head == null,
+  /* 13 組を探す */ (s, f) => f === 'F' && (s.types ?? []).some(t => t === 'SOTHAT' || t === 'NEGCMP'),
+  /* 14 〔？〕のまま進む */ (s, f) => f === 'F',
+];
+export const fittingSkills = (s, fmt) => SKILL_FITS.map((f, i) => f(s, fmt) ? i : -1).filter(i => i >= 0);
+/** 持っている技（覚えた・知っていた） */
+export const ownedSkills = state => Array.from({ length: Math.min(state.lessons?.next ?? 0, SKILL_FITS.length) }, (_, i) => i);
+/**
+ * 技を選ぶ3枚。正解はちょうど1枚（効く技のうち持っているもの）、はずれ2枚は「この文・形式に効かない」持っている技。
+ * 作れないとき（効く技を持っていない、持ち技が足りない）は { choices: null, fits, missing }。missing は効くが未習得の技
+ */
+export function skillChoice(s, fmt, state, rand = Math.random) {
+  const fits = fittingSkills(s, fmt), owned = ownedSkills(state);
+  const good = fits.filter(i => owned.includes(i)), missing = fits.filter(i => !owned.includes(i));
+  const bad = owned.filter(i => !fits.includes(i));
+  if (!good.length || bad.length < 2) return { choices: null, fits, missing };
+  const pick = a => a.splice(Math.floor(rand() * a.length), 1)[0];
+  const g = good.slice(), b = bad.slice();
+  const choices = [pick(g), pick(b), pick(b)];
+  for (let i = choices.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [choices[i], choices[j]] = [choices[j], choices[i]]; }
+  return { choices, fits, missing };
+}
+/** 技のレベル。効いた回数（経験値）3・8・15・25 で Lv2〜5 */
+export const SKILL_LV = [0, 3, 8, 15, 25];
+export function skillLevel(xp = 0) {
+  let lv = 1; for (let i = 1; i < SKILL_LV.length; i++) if (xp >= SKILL_LV[i]) lv = i + 1;
+  const next = SKILL_LV[lv] ?? null;
+  return { lv, xp, next };
+}
+/** 1ターンの結果。picked＝選んだ技（技選びがなかったら null）。返り値 { kind: 'crit'|'hit'|'miss', damage } */
+export function turnResult(fits, picked, ok) {
+  if (!ok) return { kind: 'miss', damage: 1 };
+  if (picked == null) return { kind: 'hit', damage: 0 };
+  return fits.includes(picked) ? { kind: 'crit', damage: 0 } : { kind: 'hit', damage: 1 };
+}
+export const MAX_HP = 3;
+/** 対戦の記録と技の経験値を状態に入れる */
+export function recordTurn(state, { picked, kind }) {
+  const st = structuredClone(state);
+  if (kind === 'crit' && picked != null) { st.skillXp ??= {}; st.skillXp[picked] = (st.skillXp[picked] ?? 0) + 1; }
+  return st;
+}
+export function recordBattle(state, b) {
+  const st = structuredClone(state);
+  (st.battles ??= []).push(b);
+  if (st.battles.length > 500) st.battles = st.battles.slice(-500);
+  return st;
+}
+
+// ---- 今日の戦績（ストーリー用） ----
+/** 今日の戦績。英文は含めない（数字・パラメータ名だけ） */
+export function todayReport(content, state, now = Date.now()) {
+  const d = new Date(now), start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const bs = (state.battles ?? []).filter(b => b.t >= start);
+  const turns = bs.reduce((a, b) => a + b.turns, 0), hits = bs.reduce((a, b) => a + b.hits, 0);
+  const before = statsFor(content, { ...state, log: state.log.filter(l => (l.t ?? 0) < start) }, start);
+  const after = statsFor(content, state, now);
+  const changes = STATS.map(st => {
+    const a = before[st.key].value, b = after[st.key].value;
+    if (b == null) return null;
+    return { key: st.key, name: st.name, from: a, to: b, diff: a == null ? null : b - a, best: a != null && b > a && b >= (state.statBest?.[st.key] ?? 0) };
+  }).filter(x => x && x.diff !== 0);
+  const net = changes.reduce((a, c) => a + (c.diff ?? 0), 0);
+  const answers = state.log.filter(l => (l.t ?? 0) >= start).length;
+  return {
+    battles: bs.length, wins: bs.filter(b => b.win).length, losses: bs.filter(b => !b.win).length,
+    perfect: bs.filter(b => b.win && b.hp === MAX_HP).length, turns, hits, crit: bs.reduce((a, b) => a + (b.crit ?? 0), 0),
+    rate: turns ? Math.round(100 * hits / turns) : null, answers, stats: after, changes, net,
+    mood: !answers ? 'none' : changes.some(c => c.best) ? 'best' : net > 0 ? 'up' : net < 0 ? 'down'
+      : turns && hits / turns >= 0.8 ? 'good' : turns && hits / turns < 0.5 ? 'weak' : 'flat',
+  };
+}

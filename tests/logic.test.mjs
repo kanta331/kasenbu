@@ -399,3 +399,53 @@ test('ステータス：下がったときは自己ベストにしない（記�
   const up = L.statChanges({ core: { value: 29, best: null } }, { core: { value: 35, best: null } });
   assert.equal(up[0].newBest, true);
 });
+
+// ---- 技と対戦 ----
+test('技：効く技の判定（REL の節を閉じる／名詞節／指す先／骨格訳）', () => {
+  const rel = { id: 'R', tokens: ['The', 'book', 'which', 'I', 'bought', 'yesterday', 'is', 'old', '.'], main: { s: [0, 5], v: [6, 6] }, spans: [{ range: [2, 5], kind: 'REL', head: 1 }], types: ['REL'] };
+  assert.deepEqual(L.fittingSkills(rel, 'C'), [4]);
+  assert.ok(L.fittingSkills(rel, 'A').includes(3));         // 長い主語 → 先に述語を探す
+  assert.ok(!L.fittingSkills(rel, 'A').includes(0));        // 節があるので「芯を取る」ではない
+  assert.deepEqual(L.fittingSkills(rel, 'D'), [10]);
+  assert.deepEqual(L.fittingSkills({ ...rel, types: ['NEGCMP'] }, 'F'), [13, 14]);
+});
+
+test('技を選ぶ3枚：効く技はちょうど1枚。持ち技が足りない／効く技が未習得なら出さない', () => {
+  const rel = { id: 'R', tokens: ['The', 'book', 'which', 'I', 'bought', 'yesterday', 'is', 'old'], main: { s: [0, 5], v: [6, 6] }, spans: [{ range: [2, 5], kind: 'REL', head: 1 }] };
+  const st = L.emptyState(); st.lessons.next = 15;
+  for (let seed = 1; seed < 30; seed++) {
+    const { choices, fits } = L.skillChoice(rel, 'C', st, L.rng(seed));
+    assert.equal(choices.length, 3);
+    assert.equal(new Set(choices).size, 3);
+    assert.equal(choices.filter(i => fits.includes(i)).length, 1);
+  }
+  const few = L.emptyState(); few.lessons.next = 3;   // 技0〜2だけ
+  const r = L.skillChoice(rel, 'C', few);
+  assert.equal(r.choices, null); assert.deepEqual(r.missing, [4]);
+});
+
+test('ターンの結果と体力・技のレベル', () => {
+  assert.deepEqual(L.turnResult([4], 4, true), { kind: 'crit', damage: 0 });
+  assert.deepEqual(L.turnResult([4], 2, true), { kind: 'hit', damage: 1 });
+  assert.deepEqual(L.turnResult([4], 4, false), { kind: 'miss', damage: 1 });
+  assert.deepEqual(L.turnResult([4], null, true), { kind: 'hit', damage: 0 });
+  assert.equal(L.skillLevel(0).lv, 1); assert.equal(L.skillLevel(3).lv, 2); assert.equal(L.skillLevel(25).lv, 5); assert.equal(L.skillLevel(25).next, null);
+  let st = L.recordTurn(L.emptyState(), { picked: 4, kind: 'crit' });
+  st = L.recordTurn(st, { picked: 2, kind: 'hit' });
+  assert.deepEqual(st.skillXp, { 4: 1 });
+});
+
+test('今日の戦績：今日の対戦・命中率・パラメータの動き・気分', () => {
+  const s = { ...full('S001-1'), types: [] };
+  const c = content([s]);
+  const now = new Date('2026-12-05T21:00:00').getTime(), y = new Date('2026-12-04T08:00:00').getTime(), t = new Date('2026-12-05T08:00:00').getTime();
+  const st = L.emptyState();
+  for (let i = 0; i < 5; i++) st.log.push({ t: y, sid: 'S001-1', fmt: 'A', ok: i < 2 });   // 昨日 2/5
+  assert.equal(L.todayReport(c, st, now).mood, 'none');
+  for (let i = 0; i < 5; i++) st.log.push({ t, sid: 'S001-1', fmt: 'A', ok: true });        // 今日 5/5
+  st.battles = [{ t, win: true, hits: 5, turns: 5, crit: 2, hp: 3 }, { t: y, win: false, hits: 1, turns: 3, crit: 0, hp: 0 }];
+  const R = L.todayReport(c, st, now);
+  assert.deepEqual([R.battles, R.wins, R.losses, R.perfect, R.rate, R.crit], [1, 1, 0, 1, 100, 2]);
+  assert.equal(R.changes[0].key, 'core'); assert.equal(R.changes[0].from, 40); assert.equal(R.changes[0].to, 70);
+  assert.ok(['best', 'up'].includes(R.mood));
+});

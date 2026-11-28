@@ -5,6 +5,7 @@ import { LESSONS, exampleHTML } from './lessons.js';
 import * as T from './sensei.js';
 import { sfx, muted, setMuted } from './sfx.js';
 import * as Voice from './speech.js';
+import { LINES, STORY, line } from './lines.js';
 
 const $app = document.getElementById('app');
 const KIND_OPEN = { INS: '[', default: '(' }, KIND_CLOSE = { INS: ']', default: ')' };
@@ -41,6 +42,7 @@ async function copy(text, msg = 'コピーした') {
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function view(html, dock = '') {
   Voice.stop();
+  $app.classList.remove('locked');
   $app.innerHTML = html + (dock ? `<div class="dock"><div>${dock}</div></div>` : '');
   window.scrollTo(0, 0);
 }
@@ -143,7 +145,7 @@ function showHome() {
     }
     grid += '</div>';
   }
-  view(`<div class="top"><h1>下線部</h1><span><a class="link" href="eitango/">単語カード</a><button class="link" id="lessons">技</button><button class="link" id="export">書き出し</button></span></div>
+  view(`<div class="top"><h1>下線部</h1><span><a class="link" href="eitango/">単語カード</a><button class="link" id="lessons">技</button><button class="link" id="storyLink">戦績</button><button class="link" id="export">書き出し</button></span></div>
     <div class="stats">
       <div class="stat"><b>${Math.max(0, L.daysUntilExam(t))}</b><span>試験まであと（日）</span></div>
       <div class="stat"><b>${L.defeatedCount(state)}<small style="font-size:16px">/20</small></b><span>骨格を取り切れた下線部（合格ライン（推定）${L.PASS_LINE}）</span></div>
@@ -154,6 +156,7 @@ function showHome() {
   document.getElementById('go').onclick = startSession;
   document.getElementById('export').onclick = showExport;
   document.getElementById('lessons').onclick = showLessonList;
+  document.getElementById('storyLink').onclick = showStory;
   $app.querySelectorAll('[data-boss]').forEach(el => el.onclick = () => showBossIntro(bosses.get(el.dataset.boss)));
 }
 
@@ -168,7 +171,7 @@ function showLessonList() {
   const rows = LESSONS.map((les, i) => {
     const st = L.lessonStatus(state, i);
     return st
-      ? `<button class="lrow" data-li="${i}"><span class="lno">${i + 1}</span><span class="lname">${esc(les.skill)}<small>${esc(les.title)}</small></span><span class="lst ${st}">${LSTATUS[st]}</span></button>`
+      ? (() => { const k = L.skillLevel(state.skillXp?.[i]); return `<button class="lrow" data-li="${i}"><span class="lno">${i + 1}</span><span class="lname">${esc(les.skill)}<small>${esc(les.title)}</small><i class="xp"><i style="width:${k.next ? Math.round(100 * (k.xp - L.SKILL_LV[k.lv - 1]) / (k.next - L.SKILL_LV[k.lv - 1])) : 100}%"></i></i></span><span class="lst ${st}"><b>Lv${k.lv}</b>${LSTATUS[st]}</span></button>`; })()
       : `<div class="lrow off"><span class="lno">${i + 1}</span><span class="lname">${esc(les.skill)}<small>${esc(les.title)}</small></span><span class="lst">未習得</span></div>`;
   }).join('');
   view(`<div class="top"><h1>技</h1><button class="link" id="back">ホーム</button></div>
@@ -239,13 +242,18 @@ function runSession(focus = []) {
   const qs = (!focus.length && titleQs) || L.selectSession(content, state, today(), Date.now(), { focus });
   titleQs = null;
   if (!qs.length) return toast('出せる文がない');
-  session = { qs, k: 0, results: [], statsBefore: L.statsFor(content, state) };
+  session = { qs, k: 0, results: [], statsBefore: L.statsFor(content, state), hp: L.MAX_HP, crit: 0 };
   showQuestion();
 }
 function showQuestion() {
   const q = session.qs[session.k], s = byId(q.sid);
-  const head = `<div class="qhead"><span>ターン ${session.k + 1} / ${session.qs.length}${q.review ? '　再戦' : ''}</span><button class="link" id="quit" style="padding:0">やめる</button></div>
-    <div class="prompt">${PROMPT[q.fmt]}</div>`;
+  q.sc = L.skillChoice(s, q.fmt, state); q.picked = null;
+  const skillBar = q.sc.choices ? `<div class="skills" id="skills"><div class="skills-h">効く技を選ぶ</div><div class="skillbtns">${q.sc.choices.map(i => {
+    const lv = L.skillLevel(state.skillXp?.[i]).lv;
+    return `<button class="skillbtn" data-skill="${i}" type="button"><b>${esc(LESSONS[i].skill)}</b><small>Lv${lv}</small></button>`;
+  }).join('')}</div></div>` : '';
+  const head = `<div class="qhead"><span>ターン ${session.k + 1} / ${session.qs.length}${q.review ? '　再戦' : ''}　<span class="hp">${hpText(session.hp)}</span></span><button class="link" id="quit" style="padding:0">やめる</button></div>
+    ${skillBar}<div class="prompt">${PROMPT[q.fmt]}</div>`;
   let body = '';
   if (q.fmt === 'A' || q.fmt === 'B') {
     body = sentenceHTML(s, { tap: i => isWord(s.tokens[i]) });
@@ -268,6 +276,14 @@ function showQuestion() {
       + `<div class="choices">${opts.map((o, i) => `<button class="choice" data-opt="${i}">${esc(o.ja)}</button>`).join('')}</div>`;
   }
   view(head + body + '<div id="after"></div>');
+  if (q.sc.choices) $app.classList.add('locked');
+  $app.querySelectorAll('[data-skill]').forEach(el => el.onclick = () => {
+    if (q.picked != null) return;
+    q.picked = +el.dataset.skill;
+    el.classList.add('picked');
+    $app.querySelectorAll('[data-skill]').forEach(b => { if (b !== el) b.classList.add('off'); });
+    $app.classList.remove('locked');
+  });
   document.getElementById('quit').onclick = () => { session = null; showHome(); };
   $app.querySelectorAll('.tok.tap').forEach(el => el.onclick = () => answer({ tap: +el.dataset.i, sid: el.dataset.sid }, el));
   $app.querySelectorAll('[data-logic]').forEach(el => el.onclick = () => answer({ logic: el.dataset.logic }, el));
@@ -277,6 +293,8 @@ function showQuestion() {
 function answer(a, el) {
   const q = session.qs[session.k];
   if (q.done) return;
+  if (q.sc?.choices && q.picked == null) return toast('先に、効く技を選ぶ');
+  $app.classList.remove('locked');
   q.done = true;
   const s = byId(q.sid);
   let ok, err = null, yours = '';
@@ -308,16 +326,32 @@ function answer(a, el) {
   $app.querySelectorAll('.tok.tap').forEach(t => t.classList.remove('tap'));
 
   state = L.recordAnswer(state, s, q.fmt, ok, today(), { err, review: q.review });
+  const tr = L.turnResult(q.sc.fits, q.sc.choices ? q.picked : null, ok);
+  const lvBefore = q.picked != null ? L.skillLevel(state.skillXp?.[q.picked]).lv : 0;
+  state = L.recordTurn(state, { picked: q.picked, kind: tr.kind });
+  const lvAfter = q.picked != null ? L.skillLevel(state.skillXp?.[q.picked]).lv : 0;
+  session.hp = Math.max(0, session.hp - tr.damage);
+  if (tr.kind === 'crit') session.crit++;
+  q.kind = tr.kind;
   save();
+  // 技の札：効く技と、選び違えた技
+  $app.querySelectorAll('[data-skill]').forEach(b => { const i = +b.dataset.skill; b.classList.remove('off'); if (q.sc.fits.includes(i)) b.classList.add('good'); else if (i === q.picked) b.classList.add('bad'); else b.classList.add('off'); });
+  const fitName = q.sc.fits.length ? LESSONS[q.sc.fits[0]].skill : '';
+  const verdictText = tr.kind === 'crit' ? '効果は抜群' : tr.kind === 'hit' ? (tr.damage ? '命中（技の見立て違い）' : '命中') : 'はずれ';
+  let say = tr.kind === 'crit' ? line(LINES.crit, { skill: fitName }) : tr.kind === 'hit' ? (tr.damage ? line(LINES.hitWrongSkill, { skill: fitName }) : line(LINES.hit)) : line(LINES.miss);
+  if (tr.damage && session.hp === 1) say = line(LINES.lowHp);
+  if (lvAfter > lvBefore) say = line(LINES.levelUp, { skill: LESSONS[q.picked].skill, n: lvAfter });
+  const missingNote = !q.sc.choices && q.sc.missing.length ? `<p class="missing">この文には技「${esc(LESSONS[q.sc.missing[0]].skill)}」が効く（未習得）。</p>` : '';
   const info = ok ? null : { fmt: q.fmt, mine: plain(yours.split('<br>')[0]).replace(/（これは.*$/, ''), right: rightAnswer(s, q.fmt), err: q.fmt === 'F' ? err : L.FORMAT_ERROR[q.fmt] };
   if (info) info.errName = ERROR_NAME[info.err];
-  session.results.push({ sid: s.id, fmt: q.fmt, ok, info });
+  session.results.push({ sid: s.id, fmt: q.fmt, ok, info, kind: q.kind });
 
   const hard = (s.hard ?? []).map(h => `${esc(L.joinTokens(s, h.range[0], h.range[1]))}：${esc(h.ja)}`).join('<br>');
   const prev = (s.referents ?? []).find(r => r.sent);
   const prevS = prev ? byId(prev.sent) : null;
   document.getElementById('after').innerHTML = `
-    <div class="verdict${ok ? ' ok' : ''}">${ok ? '命中' : 'はずれ'}</div>
+    <div class="verdict${ok ? ' ok' : ''}${tr.kind === 'crit' ? ' crit' : ''}">${verdictText}</div><span class="hp big">${hpText(session.hp)}</span>
+    <div class="sensei-say"><span class="av">先</span><p>${esc(say)}</p></div>${missingNote}
     ${!ok && yours ? `<div class="yours">あなたの選んだ読み：${yours}</div>` : ''}
     <div class="explain">
       ${prevS ? sentenceHTML(prevS, { prev: true, highlight: { refdst: range(prev.range) } }) : ''}
@@ -332,11 +366,12 @@ function answer(a, el) {
     </div>
     ${info && canAsk(s) ? senseiBoxHTML(s.id) : ''}`;
   if (info && canAsk(s)) bindSensei(document.querySelector('.chat'), s, info);
-  ok ? sfx.hit() : sfx.miss();
+  tr.kind === 'crit' ? sfx.crit() : tr.damage ? sfx.miss() : sfx.hit();
+  if (lvAfter > lvBefore) setTimeout(sfx.learn, 350);
   bindSpeak(s);
   document.getElementById('flag').onclick = e => { state.flags.push(s.id); save(); e.target.textContent = '記録した（書き出しで送れる）'; e.target.disabled = true; };
   document.querySelector('.verdict').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const last = session.k === session.qs.length - 1;
+  const last = session.k === session.qs.length - 1 || session.hp <= 0;
   const dock = document.createElement('div'); dock.className = 'dock';
   dock.innerHTML = `<div><button class="btn" id="next">${last ? '結果' : '次へ'}</button></div>`;
   $app.append(dock);
@@ -427,6 +462,22 @@ function bindSensei(box, s, info) {
   };
 }
 
+// ---- 対戦（docs/GAME.md ステップ2） ----
+const hpText = hp => '体力 ' + '●'.repeat(hp) + '○'.repeat(L.MAX_HP - hp);
+/** 勝利で得たパックを、中の単語カード（eitango）のゲージに足す。単語カードの記録がまだなければ、次の機会まで持っておく */
+function givePacks() {
+  const owed = state.packOwed ?? 0;
+  if (!owed) return;
+  let S = null;
+  try { S = JSON.parse(localStorage.getItem('eitango.v1')); } catch {}
+  if (!S || S.v !== 1 || typeof S.charge !== 'number') return;
+  const now = Date.now();
+  let c = S.charge;   // eitango の charge() と同じ計算：満タン未満のときだけ時間で溜まる
+  if (c < L.EITANGO_FULL) c = Math.min(L.EITANGO_FULL, c + Math.max(0, now - (S.chargeAt ?? now)));
+  S.charge = c + owed * L.EITANGO_FULL; S.chargeAt = now;
+  try { localStorage.setItem('eitango.v1', JSON.stringify(S)); state.packOwed = 0; save(); } catch {}
+}
+
 // ---- ステータス（docs/GAME.md 3.5） ----
 function radarSVG(stats) {
   const C = 120, R = 78, n = L.STATS.length;
@@ -459,6 +510,36 @@ function changesHTML(changes) {
   }).join('')}</ul>`;
 }
 
+// ---- 今日の戦績（インスタのストーリー用。英文は出さない） ----
+function showStory() {
+  const now = new Date(), R = L.todayReport(content, state, now.getTime());
+  const worst = R.changes.filter(c => c.diff < 0).sort((a, b) => a.diff - b.diff)[0];
+  const top = R.changes.filter(c => c.diff > 0).sort((a, b) => b.diff - a.diff)[0];
+  const vars = { rate: R.rate ?? 0, days: Math.max(0, L.daysUntilExam(now)), param: (R.mood === 'down' ? worst : top)?.name ?? '', d: Math.abs((R.mood === 'down' ? worst : top)?.diff ?? 0) };
+  let say = line(STORY[R.mood === 'best' ? 'up' : R.mood], vars);
+  if (R.mood === 'best') say += line(STORY.best);
+  const date = `${now.getFullYear()}.${now.getMonth() + 1}.${now.getDate()}`;
+  const owned = L.ownedSkills(state).length;
+  const el = document.createElement('div');
+  el.className = 'story';
+  el.innerHTML = `<div class="story-card">
+    <div class="s-top"><span class="s-logo">下線部</span><span>${date} の戦績</span></div>
+    <div class="s-days">東大院試まで あと <b>${vars.days}</b> 日</div>
+    <div class="s-big">
+      <div><b>${R.battles}</b><span>対戦</span></div>
+      <div><b>${R.wins}<small>勝</small>${R.losses}<small>敗</small></b><span>勝敗</span></div>
+      <div><b>${R.rate == null ? '—' : R.rate}<small>${R.rate == null ? '' : '%'}</small></b><span>命中率</span></div>
+    </div>
+    <div class="s-sub">抜群 ${R.crit}　完全勝利 ${R.perfect}　解いた数 ${R.answers}　技 ${owned}/${LESSONS.length}　撃破 ${L.defeatedCount(state)}/20</div>
+    ${radarSVG(R.stats)}
+    ${R.changes.length ? `<ul class="s-changes">${R.changes.map(c => `<li class="${c.diff == null ? 'new' : c.diff > 0 ? 'up' : 'down'}"><span>${c.name}</span><b>${c.to}</b><i>${c.diff == null ? '計測開始' : c.diff > 0 ? `▲${c.diff}` : `▼${-c.diff}`}${c.best ? '　自己ベスト' : ''}</i></li>`).join('')}</ul>` : '<p class="s-none">今日動いたパラメータはなし</p>'}
+    <div class="s-say"><span class="av">先</span><p><small>Claude先生</small>${esc(say)}</p></div>
+  </div>
+  <button class="s-close" type="button" aria-label="閉じる">×</button>`;
+  document.body.append(el);
+  el.querySelector('.s-close').onclick = () => el.remove();
+}
+
 // ---- 読み上げ（押したときだけ。骨格の切れ目で区切る） ----
 const speakBtn = () => Voice.canSpeak() ? '<button class="link speak" id="speak" type="button">▶ 読む</button>' : '';
 function bindSpeak(s) {
@@ -482,6 +563,7 @@ function showTitle() {
     if (tapped) sfx.title();
     el.classList.add('out');
     setTimeout(() => el.remove(), 260);
+    givePacks();
     let eit = null;
     try { eit = JSON.parse(localStorage.getItem('eitango.v1')); } catch {}
     if (L.packReady(eit)) { location.href = 'eitango/?then=battle'; return; }
@@ -496,16 +578,32 @@ const range = r => Array.from({ length: r[1] - r[0] + 1 }, (_, i) => r[0] + i);
 function showSummary() {
   const r = session.results;
   const hits = r.filter(x => x.ok).length;
-  const after = L.statsFor(content, state), changes = session.statsBefore ? L.statChanges(session.statsBefore, after) : [];
-  state = L.recordBest(state, after); save();
-  sfx.win(hits);
-  if (changes.some(c => c.diff > 0 || c.newBest)) setTimeout(sfx.up, 450);
-  if (changes.some(c => c.diff < 0)) setTimeout(sfx.down, 900);
-  view(`<h1>対戦終了</h1><p class="score">命中 <b>${hits}</b> / ${r.length}</p>${changesHTML(changes)}
+  const win = session.hp > 0 && r.length === session.qs.length, perfect = win && session.hp === L.MAX_HP;
+  if (!session.done) {   // 先生の画面から戻ったときに二重に記録しない
+    session.done = true;
+    session.after = L.statsFor(content, state);
+    session.changes = session.statsBefore ? L.statChanges(session.statsBefore, session.after) : [];
+    state = L.recordBest(state, session.after);
+    state = L.recordBattle(state, { t: Date.now(), win, hits, turns: r.length, crit: session.crit, hp: session.hp });
+    if (win) state.packOwed = (state.packOwed ?? 0) + 1;
+    save();
+    if (win) givePacks();
+    session.say = line(perfect ? LINES.perfect : win ? LINES.win : LINES.lose);
+    win ? sfx.win(hits) : sfx.down();
+    if (session.changes.some(c => c.diff > 0 || c.newBest)) setTimeout(sfx.up, 650);
+    if (win && session.changes.some(c => c.diff < 0)) setTimeout(sfx.down, 1100);
+  }
+  const changes = session.changes;
+  view(`<h1 class="${win ? 'win' : 'lose'}">${win ? (perfect ? '完全勝利' : '勝利') : '敗北'}</h1>
+    <p class="score">命中 <b>${hits}</b> / ${r.length}　<span class="hp">${hpText(session.hp)}</span>${session.crit ? `　抜群 ${session.crit}` : ''}</p>
+    ${win ? '<p class="reward">単語カードのパック ＋1</p>' : ''}
+    <div class="sensei-say"><span class="av">先</span><p>${esc(session.say)}</p></div>
+    ${changesHTML(changes)}
     <ul class="plain">${r.map((x, i) => `<li>${x.ok ? '○' : '×'}　形式${x.fmt}　<span class="muted">${x.sid}</span>${!x.ok && x.info && canAsk(byId(x.sid)) ? `　<button class="link ask" data-ask="${i}">Claude先生に聞く</button>` : ''}</li>`).join('')}</ul>`,
-    `<button class="btn" id="again">もう一度対戦</button><button class="btn sub" id="home">ホーム</button>`);
+    `<button class="btn" id="again">もう一度対戦</button><button class="btn sub" id="story">今日の戦績（ストーリー用）</button><button class="btn sub" id="home">ホーム</button>`);
   document.getElementById('again').onclick = startSession;
   document.getElementById('home').onclick = showHome;
+  document.getElementById('story').onclick = showStory;
   $app.querySelectorAll('[data-ask]').forEach(el => el.onclick = () => showSensei(r[+el.dataset.ask]));
 }
 /** 結果画面から開く先生の画面：文の解析を上に、会話を下に */
@@ -653,7 +751,7 @@ function showExport() {
   // 確認用：#q=S040-1:D でその文・その形式の1問だけを開く
   const m = location.hash.match(/^#q=([\w-]+):([A-F])$/);
   if (m && byId(m[1]) && L.applicableFormats(byId(m[1])).includes(m[2])) {
-    session = { qs: [{ sid: m[1], fmt: m[2], review: false }], k: 0, results: [] };
+    session = { qs: [{ sid: m[1], fmt: m[2], review: false }], k: 0, results: [], statsBefore: L.statsFor(content, state), hp: L.MAX_HP, crit: 0 };
     return showQuestion();
   }
   // 単語カードの開封から戻ったら、すぐ対戦

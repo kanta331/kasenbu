@@ -1,8 +1,8 @@
 /* オフライン用。コードだけをキャッシュする（コンテンツは IndexedDB にあり、ここでは扱わない）。
    保存済みがあればすぐ返し、裏でネットから取り直す。コードを更新して公開するときは VERSION を上げる。 */
-var VERSION = 'v11';
+var VERSION = 'v12';
 var CACHE = 'kasenbu-' + VERSION;
-var SHELL = ['./', 'index.html', 'js/app.js', 'js/logic.js', 'js/db.js', 'js/lessons.js', 'js/sensei.js', 'js/sfx.js', 'js/speech.js', 'manifest.webmanifest',
+var SHELL = ['./', 'index.html', 'js/app.js', 'js/logic.js', 'js/db.js', 'js/lessons.js', 'js/sensei.js', 'js/sfx.js', 'js/speech.js', 'js/lines.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
   // 中に置いた eitango（初回からオフラインで開けるように。開いたあとは eitango 自身の sw.js が受け持つ）
   'eitango/', 'eitango/index.html', '../eitango/cards.json', 'eitango/words.json', 'eitango/sensei-samples.json',

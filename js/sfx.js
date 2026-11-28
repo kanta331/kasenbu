@@ -33,6 +33,8 @@ const play = fn => { if (!muted()) try { fn(); } catch {} };
 export const sfx = {
   /** 命中：明るい2音 */
   hit: () => play(() => { tone(880, 0, 0.09, 'triangle', 0.16); tone(1320, 0.07, 0.14, 'triangle', 0.14); }),
+  /** 効果は抜群：上がる3音 */
+  crit: () => play(() => { tone(784, 0, 0.08, 'square', 0.07); tone(1175, 0.06, 0.08, 'square', 0.07); tone(1568, 0.12, 0.22, 'triangle', 0.14); }),
   /** はずれ：低く下がる1音 */
   miss: () => play(() => tone(220, 0, 0.22, 'sawtooth', 0.06, 140)),
   /** 技の習得：やわらかい3音 */
