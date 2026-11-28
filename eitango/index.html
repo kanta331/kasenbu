@@ -2322,8 +2322,13 @@ body{
         t.set='met'; (t.origin=t.origin||[]).push(o);
         if(merged && (t.senses||[]).indexOf(e.meaning)<0) t.senses=[e.meaning].concat(t.senses||[]);
         if(!t.status) t.status='approved';
+        /* 発音・カタカナ・例文は、カードにないときだけ受け箱の分で埋める */
+        if(!t.ipa && e.ipa) t.ipa=e.ipa;
+        if(!t.kana && e.kana) t.kana=e.kana;
+        if(!(t.examples||[]).length && (e.examples||[]).length) t.examples=e.examples;
       }else{
-        cards.push({ id:id, word:e.word, set:'met', category:'', pos:'', ipa:'', kana:'', senses:[e.meaning], senses_noun:[], origin:[o], status:'approved', local:true });
+        /* 新しく作るカードは簡易なつくり（図なし）。発音・カタカナ・例文は下線部が付けて送ったもの */
+        cards.push({ id:id, word:e.word, set:'met', category:'', pos:'', ipa:e.ipa||'', kana:e.kana||'', senses:[e.meaning], senses_noun:[], examples:e.examples||[], origin:[o], status:'approved', local:true });
       }
       n++;
     });

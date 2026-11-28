@@ -246,6 +246,11 @@ export function bossCopyText(boss, result, elapsedSec) {
   return lines.join('\n');
 }
 /** 解剖で間違えた文の難語を、eitango の受け箱形式で。`語｜出典｜出会った一文｜誤読｜文脈での意味` */
+/** 難語の発音・カタカナ・例文（content.words。キーは「語|文脈での意味」）。なければ空 */
+export function cardExtra(content, word, meaning) {
+  const w = content.words?.[`${word}|${meaning}`];
+  return w ? { ipa: w.ipa ?? '', kana: w.kana ?? '', examples: w.ex ?? [] } : { ipa: '', kana: '', examples: [] };
+}
 /** 受け箱の中身（解剖で間違えた文の難語）。key は語＋文ID */
 export function inboxEntries(content, state) {
   const byId = new Map(content.sentences.map(s => [s.id, s]));
@@ -256,7 +261,7 @@ export function inboxEntries(content, state) {
     for (const h of s.hard ?? []) {
       const word = joinTokens(s, h.range[0], h.range[1]);
       const key = `${word}|${s.id}`; if (seen.has(key)) continue; seen.add(key);
-      out.push({ key, word, tr: sourceLabel(s), sentence: s.text, err: l.err ?? '', meaning: h.ja });
+      out.push({ key, word, tr: sourceLabel(s), sentence: s.text, err: l.err ?? '', meaning: h.ja, ...cardExtra(content, word, h.ja) });
     }
   }
   return out;

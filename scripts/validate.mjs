@@ -135,6 +135,25 @@ for (const b of data.bosses ?? []) {
 const bossSents = new Set((data.bosses ?? []).flatMap(b => b.sentences));
 for (const s of data.sentences) if (s.source?.part && !bossSents.has(s.id)) err(s.id, '下線部の文なのにどのボスにも入っていない');
 
+// 難語の発音・カタカナ・例文（受け箱から単語カードへ送る分）
+if (data.words) {
+  const need = new Set();
+  for (const s of data.sentences) for (const h of s.hard ?? []) {
+    let w = ''; for (let i = h.range[0]; i <= h.range[1]; i++) w += (i > h.range[0] && (s.space_before?.[i] ?? true) ? ' ' : '') + s.tokens[i];
+    need.add(`${w}|${h.ja}`);
+  }
+  for (const k of need) if (!data.words[k]) warn('words', `発音・例文がない難語: ${k}`);
+  for (const [k, v] of Object.entries(data.words)) {
+    if (!/^\/.+\/$/.test(v.ipa ?? '')) err('words', `${k} の ipa が /…/ でない`);
+    if (!/^[ァ-ヶー・ ]+$/.test(v.kana ?? '')) err('words', `${k} の kana がカタカナでない: ${v.kana}`);
+    if (!Array.isArray(v.ex) || v.ex.length !== 2) err('words', `${k} の例文が2つでない`);
+    for (const e of v.ex ?? []) {
+      if (!e.en || !e.ja || !e.focus) err('words', `${k} の例文に空の欄`);
+      else if (!e.en.includes(e.focus)) err('words', `${k} の focus「${e.focus}」が例文にない`);
+    }
+  }
+}
+
 const held = data.sentences.filter(s => s.status === 'hold').length;
 console.log(`文 ${data.sentences.length}（hold ${held}） / ボス ${(data.bosses ?? []).length}`);
 console.log(`エラー ${errors.length} / 警告 ${warnings.length}`);

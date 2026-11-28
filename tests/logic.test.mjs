@@ -308,3 +308,26 @@ test('中の eitango：受け箱をカードに重ねる決まり（apply_words.
   assert.equal(cards[1].set, 'met');
   assert.equal(cards[2].id, 'vocation'); assert.equal(cards[2].status, 'approved'); assert.equal(cards[2].origin[0].misread, '');
 });
+
+test('受け箱：発音・カタカナ・例文を付けて送り、中の eitango はない欄だけ埋める', () => {
+  const s = { ...full('S038-2'), source: { kind: 'seihon', no: 38 }, text: 'w0 w1' };
+  const ex = [{ en: 'A w10 b.', ja: 'あ', focus: 'w10' }];
+  const c = { ...content([s]), words: { 'w10|語': { ipa: '/x/', kana: 'エックス', ex } } };
+  const st = L.recordAnswer(L.emptyState(), s, 'F', false, TODAY, { err: 'E4' });
+  const e = L.inboxToSend(c, st)[0];
+  assert.deepEqual([e.ipa, e.kana, e.examples], ['/x/', 'エックス', ex]);
+  assert.deepEqual(L.cardExtra(c, 'nope', 'x'), { ipa: '', kana: '', examples: [] });
+
+  const html = fs.readFileSync(new URL('../eitango/index.html', import.meta.url), 'utf8');
+  const a = html.indexOf('function inboxNorm'), b = html.indexOf('\n  S=load();', a);
+  const applyInbox = new Function(html.slice(a, b) + '\nreturn applyInbox;')();
+  const cards = [{ id: 'observe', word: 'observe', set: 'list', ipa: '/old/', senses: ['観察する'], examples: [{ en: 'keep' }], status: 'approved' }];
+  applyInbox(cards, [
+    { word: 'observe', tr: 'TR1', sentence: 's', meaning: '気づく', ipa: '/new/', kana: 'オブザーブ', examples: ex },
+    { word: 'novel', tr: 'TR2', sentence: 's', meaning: '目新しい', ipa: '/n/', kana: 'ナヴル', examples: ex },
+  ]);
+  assert.equal(cards[0].ipa, '/old/');              // あるものは変えない
+  assert.equal(cards[0].kana, 'オブザーブ');         // ないものだけ埋める
+  assert.deepEqual(cards[0].examples, [{ en: 'keep' }]);
+  assert.deepEqual([cards[1].ipa, cards[1].kana, cards[1].examples], ['/n/', 'ナヴル', ex]);
+});

@@ -531,12 +531,18 @@ function finishBoss(b, sec, answers) {
 const EITANGO_INBOX = 'eigo:inbox';   // 中の eitango が起動時に読んでカードにする（同じ端末・同じ場所の localStorage）
 function sendInbox() {
   const ents = L.inboxToSend(content, state);
-  if (!ents.length) return toast('送る語がない');
   let box = [];
   try { box = JSON.parse(localStorage.getItem(EITANGO_INBOX)) || []; } catch {}
+  // 前に送った分で発音・例文がまだないものに足す
+  let filled = 0;
+  for (const e of box) if (!e.ipa && !(e.examples ?? []).length) { const x = L.cardExtra(content, e.word, e.meaning); if (x.ipa || x.examples.length) { Object.assign(e, x); filled++; } }
+  if (!ents.length) {
+    if (filled) { try { localStorage.setItem(EITANGO_INBOX, JSON.stringify(box)); } catch {} return toast(`送った${filled}語に発音と例文を足した`); }
+    return toast('送る語がない');
+  }
   const have = new Set(box.map(e => e.key));
   const day = new Date().toISOString().slice(0, 10);
-  for (const e of ents) if (!have.has(e.key)) box.push({ key: e.key, word: e.word, tr: e.tr, sentence: e.sentence, misread: '', meaning: e.meaning, date: day, from: 'kasenbu' });
+  for (const e of ents) if (!have.has(e.key)) box.push({ key: e.key, word: e.word, tr: e.tr, sentence: e.sentence, misread: '', meaning: e.meaning, ipa: e.ipa, kana: e.kana, examples: e.examples, date: day, from: 'kasenbu' });
   try { localStorage.setItem(EITANGO_INBOX, JSON.stringify(box)); }
   catch { return toast('送れなかった（端末の空き容量）'); }
   state.inboxSent = [...(state.inboxSent ?? []), ...ents.map(e => e.key)]; save();

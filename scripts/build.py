@@ -165,7 +165,11 @@ def cmd_assemble():
     for s in sents:
         if s['id'] in ann: out.append(resolve(s, ann[s['id']], errors))
     missing = [s['id'] for s in sents if s['id'] not in ann]
-    bundle = {'version': 1, 'sentences': out, 'bosses': bosses}
+    # 難語ごとの発音・カタカナ・例文（受け箱から単語カードへ送るときに付ける）。キーは「語|文脈での意味」
+    words = {}
+    for f in sorted((CON/'src').glob('words_*.json')):
+        words.update(json.loads(f.read_text()))
+    bundle = {'version': 1, 'sentences': out, 'bosses': bosses, 'words': words}
     (CON/'kasenbu-content.json').write_text(json.dumps(bundle, ensure_ascii=False, indent=1))
     print(f'{len(out)} 文を出力 / 未作成 {len(missing)} 文')
     for e in errors: print('ERROR', e)
